@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Smart TXT Barcode Matcher</title>
+
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+          },
+        },
+      },
+    };
+  </script>
+
+  <!-- Lucide Icons via CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- html5-qrcode for 1D Barcode Camera Scanning -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    /* Responsive video container for html5-qrcode */
+    #camera-reader video {
+      width: 100% !important;
+      border-radius: 0.75rem;
+      object-fit: cover;
+    }
+    #camera-reader__scan_region {
+      background: #0f172a;
+      border-radius: 0.75rem;
+      overflow: hidden;
+    }
+    #camera-reader__dashboard_section_csr button,
+    #camera-reader__dashboard_section_swaplink {
+      display: none !important;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen flex flex-col">
+
+  <!-- ==================== TOP HEADER ==================== -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
+    <div class="max-w-3xl mx-auto px-3 sm:px-5 py-3">
+      <div class="flex items-center justify-between gap-2">
+        <!-- App Brand -->
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
+            <i data-lucide="scan-barcode" class="w-5 h-5"></i>
+          </div>
+          <div class="min-w-0">
+            <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 truncate">
+              Smart TXT Barcode Matcher
+            </h1>
+            <div class="flex items-center gap-2 mt-0.5">
+              <span id="header-record-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                0 TXT Records
+              </span>
+              <span id="header-today-badge" class="text-[11px] font-semibold text-slate-500">
+                0 Scans Today
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sound Toggle -->
+        <button id="btn-sound-toggle" onclick="toggleSound()"
+          class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition shrink-0"
+          title="Toggle Sound Feedback">
+          <i data-lucide="volume-2" id="sound-icon" class="w-4 h-4 text-indigo-600"></i>
+          <span id="sound-label" class="hidden sm:inline">Sound ON</span>
+        </button>
+      </div>
+
+      <!-- 3 Clean Navigation Tabs -->
+      <nav class="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t border-slate-100">
+        <button onclick="switchTab('scan')" id="tab-btn-scan"
+          class="py-2.5 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 bg-slate-900 text-white shadow-xs transition">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span>Scan</span>
+        </button>
+        <button onclick="switchTab('upload')" id="tab-btn-upload"
+          class="py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 text-slate-600 hover:bg-slate-100 transition">
+          <i data-lucide="file-text" class="w-4 h-4"></i>
+          <span>Upload TXT</span>
+        </button>
+        <button onclick="switchTab('search')" id="tab-btn-search"
+          class="py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 text-slate-600 hover:bg-slate-100 transition">
+          <i data-lucide="search" class="w-4 h-4"></i>
+          <span>Search & History</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ==================== MAIN CONTENT ==================== -->
+  <main class="max-w-3xl w-full mx-auto px-3 sm:px-5 py-4 flex-1 space-y-4">
+
+    <!-- ==================== TAB 1: SCAN ==================== -->
+    <section id="tab-scan" class="space-y-4">
+
+      <!-- Empty TXT Prompt Banner -->
+      <div id="empty-txt-banner" class="hidden bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 class="text-sm font-extrabold text-indigo-950">Abhi koi TXT file load nahi hai!</h2>
+          <p class="text-xs text-indigo-700 mt-0.5">
+            Apni 2,700 images wali TXT file upload karo ya test karne ke liye Sample Data load karo.
+          </p>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button onclick="loadSampleData()" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition">
+            Load Sample Data
+          </button>
+          <button onclick="switchTab('upload')" class="px-3.5 py-2.5 rounded-xl bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition">
+            Upload TXT
+          </button>
+        </div>
+      </div>
+
+      <!-- INSTANT RESULT CARD (RED = FOUND/SKIP | GREEN = NOT FOUND/SHOOT) -->
+      <div id="scan-result-card" class="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-5 text-center transition-colors">
+        <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2.5">
+          <i data-lucide="scan-line" class="w-6 h-6"></i>
+        </div>
+        <h2 class="text-lg sm:text-xl font-extrabold text-slate-800">Barcode Scan Karo Ya Number Daalo</h2>
+        <p class="text-xs sm:text-sm text-slate-500 mt-1">
+          Scan karte hi turant pata chalega: <strong>Photo Le Liya Hai (Skip)</strong> ya <strong>Photo Lena Hai (Shoot)</strong>.
+        </p>
+      </div>
+
+      <!-- CAMERA BARCODE SCANNER CARD -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+        <div class="flex items-center justify-between mb-3">
+          <div class="flex items-center gap-2">
+            <i data-lucide="camera" class="w-5 h-5 text-indigo-600"></i>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base">Mobile Camera Scanner (1D Barcode)</h3>
+          </div>
+          <span id="camera-badge" class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">
+            Camera Off
+          </span>
+        </div>
+
+        <!-- Camera Viewport -->
+        <div class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex items-center justify-center mb-3">
+          <div id="camera-reader" class="w-full"></div>
+          <div id="camera-placeholder" class="text-center p-6 text-slate-400">
+            <i data-lucide="video-off" class="w-9 h-9 mx-auto mb-2 opacity-60"></i>
+            <p class="text-xs font-medium">Rear camera se sticker ka barcode scan karne ke liye niche button dabayein.</p>
+          </div>
+        </div>
+
+        <!-- Camera Buttons (Start / Stop / Torch) -->
+        <div class="flex items-center gap-2">
+          <button id="btn-start-cam" onclick="startCamera()"
+            class="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2">
+            <i data-lucide="play" class="w-4 h-4"></i> Start Camera
+          </button>
+          <button id="btn-stop-cam" onclick="stopCamera()"
+            class="hidden flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2">
+            <i data-lucide="square" class="w-4 h-4"></i> Stop Camera
+          </button>
+          <button id="btn-torch" onclick="toggleTorch()"
+            class="hidden py-3 px-4 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold text-sm transition flex items-center justify-center gap-1.5"
+            title="Toggle Flash / Torch">
+            <i data-lucide="flashlight" class="w-4 h-4"></i>
+            <span id="torch-label">Flash</span>
+          </button>
+        </div>
+        <p class="text-[11px] text-slate-400 mt-2 text-center">
+          Supports CODE-128, CODE-39, EAN-13, UPC, ITF, CODABAR • 1.5s anti-spam cooldown
+        </p>
+      </div>
+
+      <!-- MANUAL / HARDWARE SCANNER INPUT CARD -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2">
+            <i data-lucide="keyboard" class="w-4 h-4 text-indigo-600"></i>
+            <h3 class="font-bold text-slate-900 text-sm">Manual / USB-Bluetooth Scanner Input</h3>
+          </div>
+          <span class="text-[11px] font-bold text-emerald-600">Enter to Match</span>
+        </div>
+
+        <form onsubmit="handleManualSubmit(event)" class="flex gap-2">
+          <div class="relative flex-1">
+            <input id="manual-input" type="text" autocomplete="off"
+              placeholder="Scan ya type karo (e.g. SR.64039/1026 ya 99072)..."
+              class="w-full pl-3.5 pr-9 py-3.5 rounded-xl border-2 border-indigo-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 outline-none text-base font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-medium transition" />
+            <button type="button" onclick="clearManualInput()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
+              <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+          </div>
+          <button type="submit"
+            class="px-5 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm shadow-xs transition shrink-0">
+            Check
+          </button>
+        </form>
+
+        <!-- Quick Test Chips -->
+        <div class="mt-3 pt-3 border-t border-slate-100">
+          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Test (Click to Try)</p>
+          <div class="flex flex-wrap gap-1.5">
+            <button onclick="processBarcode('SR.64039/1026')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-xs font-bold text-slate-700 border border-slate-200 transition">
+              SR.64039/1026
+            </button>
+            <button onclick="processBarcode('990720826')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-xs font-bold text-slate-700 border border-slate-200 transition">
+              990720826
+            </button>
+            <button onclick="processBarcode('99075')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-xs font-bold text-slate-700 border border-slate-200 transition">
+              99075 (Core SR)
+            </button>
+            <button onclick="processBarcode('SR.88888/1126')" class="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-xs font-bold text-emerald-800 border border-emerald-200 transition">
+              SR.88888/1126 (New)
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== TAB 2: UPLOAD TXT ==================== -->
+    <section id="tab-upload" class="hidden space-y-4">
+
+      <!-- Upload Card -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h2 class="text-base font-extrabold text-slate-900">Apni TXT File Upload Karo</h2>
+            <p class="text-xs text-slate-600 mt-0.5 leading-relaxed">
+              Format example: <code class="px-1.5 py-0.5 bg-slate-100 rounded font-mono text-indigo-700">599_GW_SR.990720826</code> (Price_Category_SR+MMYY).
+              2,700+ lines ek second mein IndexedDB mein save ho jayengi—refresh karne par data gayab nahi hoga.
+            </p>
+          </div>
+        </div>
+
+        <!-- Upload Mode Buttons -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <input id="file-replace-input" type="file" accept=".txt,.csv" class="hidden" onchange="handleTxtUpload(event, 'REPLACE')" />
+            <button onclick="document.getElementById('file-replace-input').click()"
+              class="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2">
+              <i data-lucide="file-up" class="w-4 h-4"></i> Upload & Replace TXT
+            </button>
+            <p class="text-[11px] text-slate-500 mt-1 text-center">Purana data hata kar nayi TXT load karega</p>
+          </div>
+
+          <div>
+            <input id="file-append-input" type="file" accept=".txt,.csv" class="hidden" onchange="handleTxtUpload(event, 'APPEND')" />
+            <button onclick="document.getElementById('file-append-input').click()"
+              class="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2">
+              <i data-lucide="file-plus-2" class="w-4 h-4"></i> Append (Add More) TXT
+            </button>
+            <p class="text-[11px] text-slate-500 mt-1 text-center">Purane data mein naye numbers jodega (No Duplicates)</p>
+          </div>
+        </div>
+
+        <div id="upload-status-box" class="hidden rounded-xl p-3 bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800"></div>
+      </div>
+
+      <!-- Sample Data, Export & Clear Card -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
+        <h3 class="text-sm font-extrabold text-slate-900">Data Management & Backup</h3>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <button onclick="loadSampleData()"
+            class="py-3 px-3.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5">
+            <i data-lucide="sparkles" class="w-4 h-4"></i> Load Sample Data (5)
+          </button>
+
+          <button onclick="exportUpdatedTxt()"
+            class="py-3 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5">
+            <i data-lucide="download" class="w-4 h-4"></i> Export Updated TXT
+          </button>
+
+          <button onclick="confirmClearAll()"
+            class="py-3 px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5">
+            <i data-lucide="trash-2" class="w-4 h-4"></i> Clear All Data
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ==================== TAB 3: SEARCH & HISTORY ==================== -->
+    <section id="tab-search" class="hidden space-y-4">
+
+      <!-- Instant Search Across All TXT Records -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+            <i data-lucide="search" class="w-4 h-4 text-indigo-600"></i> Search TXT Records
+          </h3>
+          <span id="search-count-label" class="text-xs font-bold text-slate-500">0 items</span>
+        </div>
+
+        <input id="search-input" type="text" oninput="renderSearchResults()"
+          placeholder="Search SR number, Price, Category, or Filename (e.g. 99072, GW, 64039)..."
+          class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-sm font-medium mb-3" />
+
+        <div id="search-results-list" class="divide-y divide-slate-100 max-h-72 overflow-y-auto text-sm">
+          <p class="text-xs text-slate-400 py-4 text-center">No records loaded.</p>
+        </div>
+      </div>
+
+      <!-- Today's Scan History -->
+      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+            <i data-lucide="history" class="w-4 h-4 text-indigo-600"></i> Aaj Ki Scan History (Today)
+          </h3>
+          <button onclick="confirmClearHistory()" class="text-xs font-bold text-rose-600 hover:underline">
+            Clear History
+          </button>
+        </div>
+
+        <div id="history-list" class="divide-y divide-slate-100 max-h-80 overflow-y-auto text-sm">
+          <p class="text-xs text-slate-400 py-4 text-center">Abhi tak koi scan nahi hua hai.</p>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ==================== CUSTOM CONFIRM MODAL (No alert/confirm) ==================== -->
+  <div id="modal-overlay" class="hidden fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200">
+      <h3 id="modal-title" class="text-base font-extrabold text-slate-900">Confirm</h3>
+      <p id="modal-body" class="text-sm text-slate-600 mt-1.5">Are you sure?</p>
+      <div class="flex items-center justify-end gap-2 mt-5">
+        <button onclick="closeModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs sm:text-sm hover:bg-slate-50">
+          Cancel
+        </button>
+        <button id="modal-confirm-btn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm">
+          Confirm
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== TOAST CONTAINER ==================== -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-xs pointer-events-none"></div>
+
+  <!-- ==================== APPLICATION LOGIC ==================== -->
+  <script>
+    /*************************************************************************
+     * 1. STATE & O(1) HASH MAP INDEXES
+     *************************************************************************/
+    const DB_NAME = 'SmartTxtBarcodeMatcherDB';
+    const DB_VERSION = 1;
+    let db = null;
+
+    let txtRecords = [];   // Array of parsed record objects
+    let scanHistory = [];  // Array of scan log objects
+    let soundEnabled = true;
+    let activeTab = 'scan';
+
+    // Ultra-fast O(1) lookup maps
+    const fullMap = new Map();     // Full uppercase filename -> record
+    const srNormMap = new Map();   // Normalized SR tokens (SR.990720826, SR990720826, 990720826) -> record
+    const coreSrMap = new Map();   // Core SR digits without trailing 4-digit MMYY (99072) -> record
+
+    // Camera state
+    let html5QrCode = null;
+    let isCameraRunning = false;
+    let isTorchOn = false;
+    let lastCamScan = { code: '', time: 0 };
+    const SCAN_COOLDOWN_MS = 1500;
+
+    // Hardware scanner keyboard buffer
+    let hwBuffer = '';
+    let hwLastTime = 0;
+
+    // Web Audio API Context
+    let audioCtx = null;
+
+    /*************************************************************************
+     * 2. WEB AUDIO API FEEDBACK (Double-Beep for Found, Chime for Not Found)
+     *************************************************************************/
+    function getAudioCtx() {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (AC) audioCtx = new AC();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+
+    function playSound(type) {
+      if (!soundEnabled) return;
+      try {
+        const ctx = getAudioCtx();
+        if (!ctx) return;
+        const now = ctx.currentTime;
+
+        if (type === 'FOUND') {
+          // Distinct double-beep alert (Skip piece!)
+          [320, 260].forEach((freq, idx) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+            gain.gain.setValueAtTime(0.18, now + idx * 0.14);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.12);
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start(now + idx * 0.14);
+            osc.stop(now + idx * 0.14 + 0.13);
+          });
+        } else {
+          // Crisp single chime (Not found -> Shoot piece!)
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1046.5, now); // C6 crisp chime
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.26);
+        }
+      } catch (e) {}
+    }
+
+    function toggleSound() {
+      soundEnabled = !soundEnabled;
+      document.getElementById('sound-icon').setAttribute('data-lucide', soundEnabled ? 'volume-2' : 'volume-x');
+      document.getElementById('sound-label').textContent = soundEnabled ? 'Sound ON' : 'Sound OFF';
+      lucide.createIcons();
+      if (soundEnabled) playSound('NOT_FOUND');
+    }
+
+    /*************************************************************************
+     * 3. PARSER & O(1) SMART MATCHING ENGINE
+     *    Format: 599_GW_SR.990720826 (Price_Category_SR+MMYY)
+     *************************************************************************/
+    function parseTxtLine(rawLine) {
+      let cleaned = (rawLine || '').trim();
+      if (!cleaned) return null;
+
+      // Strip common image extensions
+      cleaned = cleaned.replace(/\.(jpe?g|png|webp|gif|bmp|heic)$/i, '').trim();
+      if (!cleaned) return null;
+
+      const upper = cleaned.toUpperCase();
+      const parts = upper.split('_');
+
+      let price = '-';
+      let category = '-';
+      let srRaw = upper;
+
+      if (parts.length >= 3) {
+        price = parts[0];
+        category = parts.slice(1, -1).join('_');
+        srRaw = parts[parts.length - 1];
+      } else if (parts.length === 2) {
+        price = parts[0];
+        srRaw = parts[1];
+      }
+
+      // Normalize SR token (e.g. SR.990720826 -> srNoPunct: SR990720826, digitsOnly: 990720826)
+      const srNoSlash = srRaw.replace(/[\/\-\s]/g, '');
+      const srNoPunct = srNoSlash.replace(/[^A-Z0-9]/g, '');
+      const digitsOnly = srNoPunct.replace(/\D/g, '');
+
+      // Extract core SR digits without trailing 4-digit MMYY (e.g. 990720826 -> 99072, 640391026 -> 64039)
+      let coreDigits = digitsOnly;
+      if (digitsOnly.length >= 8) {
+        coreDigits = digitsOnly.slice(0, -4);
+      }
+
+      return {
+        raw: cleaned,
+        upper,
+        price,
+        category,
+        srRaw,
+        srNoSlash,
+        srNoPunct,
+        digitsOnly,
+        coreDigits,
+      };
+    }
+
+    function rebuildHashMaps() {
+      fullMap.clear();
+      srNormMap.clear();
+      coreSrMap.clear();
+
+      for (const rec of txtRecords) {
+        fullMap.set(rec.upper, rec);
+        if (rec.srRaw) srNormMap.set(rec.srRaw, rec);
+        if (rec.srNoSlash) srNormMap.set(rec.srNoSlash, rec);
+        if (rec.srNoPunct) srNormMap.set(rec.srNoPunct, rec);
+        if (rec.digitsOnly) srNormMap.set(rec.digitsOnly, rec);
+        if (rec.coreDigits && rec.coreDigits.length >= 4 && !coreSrMap.has(rec.coreDigits)) {
+          coreSrMap.set(rec.coreDigits, rec);
+        }
+      }
+    }
+
+    /**
+     * Ultra-fast matching for scanned barcodes like:
+     * "SR.64039/1026", "64039/1026", "640391026", "SR.640391026", "64039"
+     */
+    function matchScannedCode(rawScanned) {
+      const upper = (rawScanned || '').trim().toUpperCase();
+      if (!upper) return null;
+
+      // Normalize by removing '/', '-', spaces
+      const norm = upper.replace(/[\/\-\s]/g, '');
+      const alnum = norm.replace(/[^A-Z0-9]/g, '');
+      const digits = alnum.replace(/\D/g, '');
+
+      // 1. Exact full filename match
+      if (fullMap.has(upper)) return { record: fullMap.get(upper), matchType: 'Exact Filename' };
+
+      // 2. Exact / Normalized SR match
+      if (srNormMap.has(norm)) return { record: srNormMap.get(norm), matchType: 'Exact SR Match' };
+      if (srNormMap.has(alnum)) return { record: srNormMap.get(alnum), matchType: 'Normalized SR Match' };
+      if (digits && srNormMap.has(digits)) return { record: srNormMap.get(digits), matchType: 'SR Digits Match' };
+
+      // 3. Core SR digits match (without trailing 4-digit MMYY)
+      if (digits && coreSrMap.has(digits)) {
+        return { record: coreSrMap.get(digits), matchType: 'Core SR Match' };
+      }
+      if (digits.length >= 8) {
+        const scannedCore = digits.slice(0, -4);
+        if (coreSrMap.has(scannedCore)) {
+          return { record: coreSrMap.get(scannedCore), matchType: `Core SR Match (#${scannedCore})` };
+        }
+      }
+
+      // 4. Safe substring match (length >= 5)
+      if (digits.length >= 5) {
+        for (const rec of txtRecords) {
+          if (
+            (rec.digitsOnly && rec.digitsOnly.includes(digits)) ||
+            (rec.coreDigits && rec.coreDigits.length >= 5 && digits.includes(rec.coreDigits))
+          ) {
+            return { record: rec, matchType: 'Partial SR Match' };
+          }
+        }
+      }
+
+      return null;
+    }
+
+    /*************************************************************************
+     * 4. INDEXEDDB PERSISTENCE
+     *************************************************************************/
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const d = e.target.result;
+          if (!d.objectStoreNames.contains('txt_records')) {
+            d.createObjectStore('txt_records', { keyPath: 'upper' });
+          }
+          if (!d.objectStoreNames.contains('scan_history')) {
+            d.createObjectStore('scan_history', { keyPath: 'id', autoIncrement: true });
+          }
+        };
+        req.onsuccess = (e) => {
+          db = e.target.result;
+          resolve(db);
+        };
+        req.onerror = (e) => reject(e.target.error);
+      });
+    }
+
+    function dbGetAll(storeName) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const req = tx.objectStore(storeName).getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function dbPut(storeName, obj) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const req = tx.objectStore(storeName).put(obj);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function dbBatchPut(storeName, items) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        for (const item of items) store.put(item);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    }
+
+    function dbClear(storeName) {
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const req = tx.objectStore(storeName).clear();
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function refreshAllData() {
+      txtRecords = await dbGetAll('txt_records');
+      scanHistory = (await dbGetAll('scan_history')).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      rebuildHashMaps();
+      updateHeaderBadges();
+      renderSearchResults();
+      renderHistoryList();
+
+      document.getElementById('empty-txt-banner').classList.toggle('hidden', txtRecords.length > 0);
+    }
+
+    /*************************************************************************
+     * 5. SCAN PROCESSING & VISUAL RESULT CARDS
+     *************************************************************************/
+    async function processBarcode(rawCode) {
+      const clean = (rawCode || '').trim();
+      if (!clean) return;
+
+      const match = matchScannedCode(clean);
+      const nowIso = new Date().toISOString();
+
+      const logItem = {
+        rawScanned: clean,
+        found: !!match,
+        matchedFile: match ? match.record.raw : '',
+        timestamp: nowIso,
+      };
+      logItem.id = await dbPut('scan_history', logItem);
+      scanHistory.unshift(logItem);
+
+      if (match) {
+        playSound('FOUND');
+        renderResultCard(true, clean, match.record, match.matchType);
+      } else {
+        playSound('NOT_FOUND');
+        renderResultCard(false, clean, null, null);
+      }
+
+      updateHeaderBadges();
+      if (activeTab === 'search') renderHistoryList();
+    }
+
+    function renderResultCard(isFound, rawScanned, record, matchType) {
+      const card = document.getElementById('scan-result-card');
+
+      if (isFound) {
+        // RED ALERT CARD: ALREADY IN TXT -> SKIP
+        card.className = 'rounded-2xl border-2 border-rose-600 bg-rose-600 text-white p-5 shadow-lg text-left';
+        card.innerHTML = `
+          <div class="flex items-start gap-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+              <i data-lucide="hand" class="w-7 h-7 text-white"></i>
+            </div>
+            <div class="min-w-0 flex-1">
+              <span class="inline-block px-2 py-0.5 rounded-full bg-white/20 text-[11px] font-extrabold uppercase tracking-wider mb-1">
+                ${escapeHtml(matchType)}
+              </span>
+              <h2 class="text-xl sm:text-2xl font-black leading-tight">
+                PHOTO LE LIYA HAI! (ALREADY IN TXT)
+              </h2>
+              <p class="text-sm sm:text-base font-extrabold text-rose-100 mt-0.5">
+                SKIP KARO — DUSRA PIECE UTHAO
+              </p>
+
+              <div class="mt-3 p-3 rounded-xl bg-black/20 space-y-1 text-xs sm:text-sm">
+                <div class="font-mono font-bold text-white break-all">
+                  Matched TXT: ${escapeHtml(record.raw)}
+                </div>
+                <div class="flex flex-wrap gap-x-4 gap-y-1 text-rose-100 font-semibold">
+                  <span>Price: <strong class="text-white">${escapeHtml(record.price)}</strong></span>
+                  <span>Category: <strong class="text-white">${escapeHtml(record.category)}</strong></span>
+                  <span>SR: <strong class="text-white">${escapeHtml(record.srRaw)}</strong></span>
+                </div>
+                <div class="text-[11px] text-rose-200 pt-1 border-t border-white/10">
+                  Raw Scanned: <span class="font-mono font-bold text-white">${escapeHtml(rawScanned)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        // GREEN ACTION CARD: NOT IN TXT -> SHOOT
+        card.className = 'rounded-2xl border-2 border-emerald-600 bg-emerald-600 text-white p-5 shadow-lg text-left';
+        card.innerHTML = `
+          <div class="flex flex-col gap-3.5">
+            <div class="flex items-start gap-3.5">
+              <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                <i data-lucide="camera" class="w-7 h-7 text-white"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                <span class="inline-block px-2 py-0.5 rounded-full bg-white/20 text-[11px] font-extrabold uppercase tracking-wider mb-1">
+                  New Piece
+                </span>
+                <h2 class="text-xl sm:text-2xl font-black leading-tight">
+                  NUMBER NAHI MILA! (NOT IN TXT)
+                </h2>
+                <p class="text-sm sm:text-base font-extrabold text-emerald-100 mt-0.5">
+                  ISKA PHOTO LO / SHOOT KARO
+                </p>
+                <div class="mt-2.5 p-2.5 rounded-xl bg-black/20 text-xs sm:text-sm">
+                  Raw Scanned: <span class="font-mono font-bold text-white break-all">${escapeHtml(rawScanned)}</span>
+                </div>
+              </div>
+            </div>
+
+            <button onclick="markAsShot('${escapeJs(rawScanned)}')"
+              class="w-full py-3 px-4 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 font-extrabold text-sm shadow-sm transition flex items-center justify-center gap-2">
+              <i data-lucide="plus-circle" class="w-4 h-4"></i> + Mark as Shot (Add to List)
+            </button>
+          </div>
+        `;
+      }
+      lucide.createIcons();
+    }
+
+    async function markAsShot(rawScanned) {
+      const rec = parseTxtLine(rawScanned);
+      if (!rec) return;
+
+      await dbPut('txt_records', rec);
+      await refreshAllData();
+      playSound('NOT_FOUND');
+      showToast(`"${rec.raw}" list mein add ho gaya!`, 'success');
+
+      const card = document.getElementById('scan-result-card');
+      card.className = 'rounded-2xl border-2 border-indigo-600 bg-indigo-600 text-white p-5 shadow-lg text-left';
+      card.innerHTML = `
+        <div class="flex items-center gap-3">
+          <div class="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+            <i data-lucide="check" class="w-6 h-6 text-white"></i>
+          </div>
+          <div>
+            <h2 class="text-lg font-black">LIST MEIN SAVE HO GAYA!</h2>
+            <p class="text-xs sm:text-sm text-indigo-100 mt-0.5">
+              <span class="font-mono font-bold text-white">${escapeHtml(rec.raw)}</span> ab TXT list mein add hai. Agla piece scan karo!
+            </p>
+          </div>
+        </div>
+      `;
+      lucide.createIcons();
+    }
+
+    /*************************************************************************
+     * 6. CAMERA SCANNER (1D BARCODES + TORCH + 1.5s COOLDOWN)
+     *************************************************************************/
+    async function startCamera() {
+      if (isCameraRunning) return;
+      const badge = document.getElementById('camera-badge');
+      const placeholder = document.getElementById('camera-placeholder');
+
+      try {
+        placeholder.classList.add('hidden');
+        badge.textContent = 'Starting...';
+        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800';
+
+        html5QrCode = new Html5Qrcode('camera-reader', {
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.ITF,
+            Html5QrcodeSupportedFormats.CODABAR,
+          ],
+          verbose: false,
+        });
+
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          {
+            fps: 12,
+            // Wide rectangular box ideal for 1D garment tag barcodes
+            qrbox: (vw, vh) => ({
+              width: Math.min(Math.floor(vw * 0.85), 320),
+              height: Math.min(Math.floor(vh * 0.45), 120),
+            }),
+          },
+          (decodedText) => {
+            const now = Date.now();
+            if (decodedText === lastCamScan.code && now - lastCamScan.time < SCAN_COOLDOWN_MS) {
+              return;
+            }
+            lastCamScan = { code: decodedText, time: now };
+            processBarcode(decodedText);
+          },
+          () => {}
+        );
+
+        isCameraRunning = true;
+        isTorchOn = false;
+        document.getElementById('btn-start-cam').classList.add('hidden');
+        document.getElementById('btn-stop-cam').classList.remove('hidden');
+        badge.textContent = 'Camera Active';
+        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700';
+
+        // Check if Torch/Flash is supported on this device
+        try {
+          const caps = html5QrCode.getRunningTrackCapabilities();
+          if (caps && caps.torch) {
+            document.getElementById('btn-torch').classList.remove('hidden');
+          }
+        } catch (e) {}
+      } catch (err) {
+        placeholder.classList.remove('hidden');
+        badge.textContent = 'Camera Error';
+        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700';
+        showToast('Camera access nahi mila. HTTPS (GitHub Pages) par open karke permission allow karein.', 'error');
+      }
+    }
+
+    async function stopCamera() {
+      if (!isCameraRunning || !html5QrCode) return;
+      try {
+        await html5QrCode.stop();
+        html5QrCode.clear();
+      } catch (e) {}
+      isCameraRunning = false;
+      isTorchOn = false;
+      document.getElementById('camera-placeholder').classList.remove('hidden');
+      document.getElementById('btn-start-cam').classList.remove('hidden');
+      document.getElementById('btn-stop-cam').classList.add('hidden');
+      document.getElementById('btn-torch').classList.add('hidden');
+      const badge = document.getElementById('camera-badge');
+      badge.textContent = 'Camera Off';
+      badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600';
+    }
+
+    async function toggleTorch() {
+      if (!isCameraRunning || !html5QrCode) return;
+      try {
+        isTorchOn = !isTorchOn;
+        await html5QrCode.applyVideoConstraints({ advanced: [{ torch: isTorchOn }] });
+        document.getElementById('torch-label').textContent = isTorchOn ? 'Flash ON' : 'Flash';
+      } catch (e) {
+        showToast('Torch/Flash is device par support nahi hai.', 'info');
+      }
+    }
+
+    /*************************************************************************
+     * 7. MANUAL & HARDWARE SCANNER INPUT
+     *************************************************************************/
+    function handleManualSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('manual-input');
+      const val = input.value.trim();
+      if (val) {
+        processBarcode(val);
+        input.value = '';
+        input.focus();
+      }
+    }
+
+    function clearManualInput() {
+      const input = document.getElementById('manual-input');
+      input.value = '';
+      input.focus();
+    }
+
+    // Global listener for USB/Bluetooth hardware barcode scanners
+    window.addEventListener('keydown', (e) => {
+      if (activeTab !== 'scan') return;
+      const t = e.target;
+      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
+
+      const now = Date.now();
+      if (now - hwLastTime > 120) hwBuffer = '';
+      hwLastTime = now;
+
+      if (e.key === 'Enter') {
+        if (hwBuffer.length >= 2) {
+          e.preventDefault();
+          const code = hwBuffer.trim();
+          hwBuffer = '';
+          processBarcode(code);
+        }
+      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        hwBuffer += e.key;
+      }
+    });
+
+    /*************************************************************************
+     * 8. TXT UPLOAD, SAMPLE DATA, EXPORT & CLEAR
+     *************************************************************************/
+    async function handleTxtUpload(event, mode) {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const text = await file.text();
+      const lines = text.split(/\r?\n/);
+      const parsedMap = new Map();
+
+      for (const line of lines) {
+        const rec = parseTxtLine(line);
+        if (rec) parsedMap.set(rec.upper, rec);
+      }
+
+      const newRecords = Array.from(parsedMap.values());
+      if (newRecords.length === 0) {
+        showToast('TXT file mein koi valid line nahi mili.', 'error');
+        event.target.value = '';
+        return;
+      }
+
+      if (mode === 'REPLACE') {
+        await dbClear('txt_records');
+      }
+      await dbBatchPut('txt_records', newRecords);
+      await refreshAllData();
+
+      const statusBox = document.getElementById('upload-status-box');
+      statusBox.classList.remove('hidden');
+      statusBox.textContent =
+        mode === 'REPLACE'
+          ? `Success! ${newRecords.length.toLocaleString()} unique records load ho gaye.`
+          : `Success! ${newRecords.length.toLocaleString()} lines process hui. Total records: ${txtRecords.length.toLocaleString()}.`;
+
+      showToast(`${newRecords.length.toLocaleString()} TXT records saved!`, 'success');
+      event.target.value = '';
+    }
+
+    async function loadSampleData() {
+      const samples = [
+        '599_GW_SR.990720826',
+        '599_GW_SR.990750826',
+        '599_GW_SR.990710826',
+        '599_GW_SR.990670826',
+        '735_DR_SR.640391026',
+      ];
+      const parsed = samples.map(parseTxtLine).filter(Boolean);
+      await dbBatchPut('txt_records', parsed);
+      await refreshAllData();
+      playSound('NOT_FOUND');
+      showToast('5 Sample records load ho gaye! Ab scan ya test chips try karo.', 'success');
+    }
+
+    function exportUpdatedTxt() {
+      if (txtRecords.length === 0) {
+        showToast('Export karne ke liye koi data nahi hai.', 'error');
+        return;
+      }
+      const content = txtRecords.map((r) => r.raw).join('\n');
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `updated-images-list-${new Date().toISOString().slice(0, 10)}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`Exported ${txtRecords.length.toLocaleString()} records to TXT!`, 'success');
+    }
+
+    function confirmClearAll() {
+      openModal(
+        'Clear All TXT Data?',
+        'Saare uploaded TXT records delete ho jayenge. Kya aap sure hain?',
+        async () => {
+          await dbClear('txt_records');
+          await refreshAllData();
+          showToast('Saara TXT data clear ho gaya.', 'info');
+        }
+      );
+    }
+
+    function confirmClearHistory() {
+      openModal(
+        'Clear Scan History?',
+        'Aaj ki aur purani scan history delete ho jayegi.',
+        async () => {
+          await dbClear('scan_history');
+          await refreshAllData();
+          showToast('Scan history clear ho gayi.', 'info');
+        }
+      );
+    }
+
+    /*************************************************************************
+     * 9. SEARCH, HISTORY & UI HELPERS
+     *************************************************************************/
+    function isToday(iso) {
+      if (!iso) return false;
+      const d = new Date(iso);
+      const n = new Date();
+      return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+    }
+
+    function updateHeaderBadges() {
+      document.getElementById('header-record-badge').textContent = `${txtRecords.length.toLocaleString()} TXT Records`;
+      const todayCount = scanHistory.filter((h) => isToday(h.timestamp)).length;
+      document.getElementById('header-today-badge').textContent = `${todayCount} Scans Today`;
+    }
+
+    function renderSearchResults() {
+      const q = (document.getElementById('search-input')?.value || '').trim().toUpperCase();
+      const listEl = document.getElementById('search-results-list');
+      const countEl = document.getElementById('search-count-label');
+
+      const filtered = q
+        ? txtRecords.filter((r) => r.upper.includes(q) || r.digitsOnly.includes(q) || r.srRaw.includes(q))
+        : txtRecords;
+
+      countEl.textContent = `${filtered.length.toLocaleString()} items`;
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Koi matching record nahi mila.</p>`;
+        return;
+      }
+
+      // Render top 100 for instant 60fps scrolling on mobile
+      listEl.innerHTML = filtered.slice(0, 100).map((r) => `
+        <div class="py-2.5 flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <div class="font-mono font-bold text-slate-900 text-xs sm:text-sm truncate">${escapeHtml(r.raw)}</div>
+            <div class="text-[11px] text-slate-500">
+              Price: <strong>${escapeHtml(r.price)}</strong> • Cat: <strong>${escapeHtml(r.category)}</strong> • SR: <strong>${escapeHtml(r.srRaw)}</strong>
+            </div>
+          </div>
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 shrink-0">IN TXT</span>
+        </div>
+      `).join('');
+    }
+
+    function renderHistoryList() {
+      const listEl = document.getElementById('history-list');
+      const todayLogs = scanHistory.filter((h) => isToday(h.timestamp));
+
+      if (todayLogs.length === 0) {
+        listEl.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Aaj abhi tak koi scan nahi hua hai.</p>`;
+        return;
+      }
+
+      listEl.innerHTML = todayLogs.slice(0, 150).map((log) => {
+        const badge = log.found
+          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 shrink-0">FOUND (SKIP)</span>`
+          : `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 shrink-0">NOT FOUND (SHOOT)</span>`;
+        const timeStr = new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+        return `
+          <div class="py-2.5 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-mono font-bold text-slate-900 text-xs sm:text-sm truncate">${escapeHtml(log.rawScanned)}</div>
+              <div class="text-[11px] text-slate-500 truncate">
+                ${log.matchedFile ? `Matched: ${escapeHtml(log.matchedFile)} • ` : ''}${timeStr}
+              </div>
+            </div>
+            ${badge}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function switchTab(tab) {
+      activeTab = tab;
+      ['scan', 'upload', 'search'].forEach((t) => {
+        document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
+        const btn = document.getElementById(`tab-btn-${t}`);
+        if (t === tab) {
+          btn.className = 'py-2.5 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 bg-slate-900 text-white shadow-xs transition';
+        } else {
+          btn.className = 'py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 text-slate-600 hover:bg-slate-100 transition';
+        }
+      });
+
+      if (tab === 'search') {
+        renderSearchResults();
+        renderHistoryList();
+      }
+    }
+
+    function openModal(title, body, onConfirm) {
+      document.getElementById('modal-title').textContent = title;
+      document.getElementById('modal-body').textContent = body;
+      const btn = document.getElementById('modal-confirm-btn');
+      btn.onclick = async () => {
+        closeModal();
+        if (onConfirm) await onConfirm();
+      };
+      document.getElementById('modal-overlay').classList.remove('hidden');
+    }
+
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.add('hidden');
+    }
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toast-container');
+      const colors = {
+        success: 'bg-emerald-600 text-white',
+        error: 'bg-rose-600 text-white',
+        info: 'bg-slate-900 text-white',
+      };
+      const el = document.createElement('div');
+      el.className = `px-3.5 py-2.5 rounded-xl shadow-lg text-xs font-bold ${colors[type] || colors.info} pointer-events-auto transition-opacity duration-300`;
+      el.textContent = msg;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 300);
+      }, 3000);
+    }
+
+    function escapeHtml(s) {
+      return (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function escapeJs(s) {
+      return (s || '').toString().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+
+    /*************************************************************************
+     * 10. INITIALIZATION
+     *************************************************************************/
+    window.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      try {
+        await initDB();
+        await refreshAllData();
+      } catch (err) {
+        showToast('IndexedDB error: ' + err.message, 'error');
+      }
+    });
+  </script>
+</body>
+</html>
