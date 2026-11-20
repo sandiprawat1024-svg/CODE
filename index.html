@@ -1,1158 +1,460 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Smart TXT Barcode Matcher</title>
-
-  <!-- Google Font: Inter -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
-
-  <!-- Tailwind CSS via CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-          },
-        },
-      },
-    };
-  </script>
-
-  <!-- Lucide Icons via CDN -->
-  <script src="https://unpkg.com/lucide@latest"></script>
-
-  <!-- html5-qrcode for 1D Barcode Camera Scanning -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
-  <style>
-    /* Responsive video container for html5-qrcode */
-    #camera-reader video {
-      width: 100% !important;
-      border-radius: 0.75rem;
-      object-fit: cover;
-    }
-    #camera-reader__scan_region {
-      background: #0f172a;
-      border-radius: 0.75rem;
-      overflow: hidden;
-    }
-    #camera-reader__dashboard_section_csr button,
-    #camera-reader__dashboard_section_swaplink {
-      display: none !important;
-    }
-    ::-webkit-scrollbar {
-      width: 6px;
-      height: 6px;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 9999px;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Barcode Matcher</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{sans:['Inter','system-ui','sans-serif']}}}}</script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  html,body{height:100%;overscroll-behavior:none}
+  /* Camera box is FIXED size. Nothing is ever drawn over it except the thin scan guide. */
+  #cam-box{height:34dvh;min-height:170px;max-height:300px;flex-shrink:0;background:#000;position:relative;overflow:hidden}
+  #camera-reader{width:100%;height:100%}
+  #camera-reader video{width:100%!important;height:100%!important;object-fit:cover!important}
+  #camera-reader__scan_region{height:100%}
+  #camera-reader__scan_region img{display:none}
+  #camera-reader__dashboard{display:none!important}
+  .scan-line{position:absolute;left:8%;right:8%;top:50%;height:2px;background:rgba(255,255,255,.75);box-shadow:0 0 8px rgba(255,255,255,.9);pointer-events:none}
+  /* Result cards slide in from right, out to left */
+  .rcard{position:absolute;inset:0;overflow-y:auto;transform:translateX(100%);transition:transform .28s ease}
+  .rcard.in{transform:translateX(0)}
+  .rcard.out{transform:translateX(-100%)}
+  .thumb{width:84px;height:104px;object-fit:cover;border-radius:10px;background:rgba(0,0,0,.25)}
+</style>
 </head>
-<body class="bg-slate-50 text-slate-900 font-sans antialiased min-h-screen flex flex-col">
+<body class="bg-slate-100 text-slate-900 font-sans antialiased h-dvh flex flex-col overflow-hidden">
 
-  <!-- ==================== TOP HEADER ==================== -->
-  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-    <div class="max-w-3xl mx-auto px-3 sm:px-5 py-3">
-      <div class="flex items-center justify-between gap-2">
-        <!-- App Brand -->
-        <div class="flex items-center gap-2.5 min-w-0">
-          <div class="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs shrink-0">
-            <i data-lucide="scan-barcode" class="w-5 h-5"></i>
-          </div>
-          <div class="min-w-0">
-            <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 truncate">
-              Smart TXT Barcode Matcher
-            </h1>
-            <div class="flex items-center gap-2 mt-0.5">
-              <span id="header-record-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                0 TXT Records
-              </span>
-              <span id="header-today-badge" class="text-[11px] font-semibold text-slate-500">
-                0 Scans Today
-              </span>
-            </div>
-          </div>
-        </div>
+<!-- HEADER (compact) -->
+<header class="bg-white border-b border-slate-200 shrink-0 px-3 py-2 flex items-center justify-between gap-2">
+  <div class="flex items-center gap-2 min-w-0">
+    <i data-lucide="scan-barcode" class="w-5 h-5 text-indigo-600 shrink-0"></i>
+    <span id="hdr-count" class="text-sm font-extrabold truncate">0 Records</span>
+    <span id="hdr-today" class="text-xs font-semibold text-slate-500 truncate">0 aaj</span>
+  </div>
+  <button onclick="toggleSound()" class="p-2 rounded-lg bg-slate-100"><i id="sound-icon" data-lucide="volume-2" class="w-4 h-4 text-indigo-600"></i></button>
+</header>
 
-        <!-- Sound Toggle -->
-        <button id="btn-sound-toggle" onclick="toggleSound()"
-          class="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold transition shrink-0"
-          title="Toggle Sound Feedback">
-          <i data-lucide="volume-2" id="sound-icon" class="w-4 h-4 text-indigo-600"></i>
-          <span id="sound-label" class="hidden sm:inline">Sound ON</span>
-        </button>
-      </div>
-
-      <!-- 3 Clean Navigation Tabs -->
-      <nav class="grid grid-cols-3 gap-1.5 mt-3 pt-2.5 border-t border-slate-100">
-        <button onclick="switchTab('scan')" id="tab-btn-scan"
-          class="py-2.5 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 bg-slate-900 text-white shadow-xs transition">
-          <i data-lucide="camera" class="w-4 h-4"></i>
-          <span>Scan</span>
-        </button>
-        <button onclick="switchTab('upload')" id="tab-btn-upload"
-          class="py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 text-slate-600 hover:bg-slate-100 transition">
-          <i data-lucide="file-text" class="w-4 h-4"></i>
-          <span>Upload TXT</span>
-        </button>
-        <button onclick="switchTab('search')" id="tab-btn-search"
-          class="py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 text-slate-600 hover:bg-slate-100 transition">
-          <i data-lucide="search" class="w-4 h-4"></i>
-          <span>Search & History</span>
-        </button>
-      </nav>
+<!-- ================= SCAN TAB ================= -->
+<section id="tab-scan" class="flex-1 min-h-0 flex flex-col">
+  <!-- Camera: fixed, never covered -->
+  <div id="cam-box">
+    <div id="camera-reader"></div>
+    <div class="scan-line"></div>
+    <div id="cam-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-300 text-xs gap-2">
+      <i data-lucide="video-off" class="w-8 h-8 opacity-60"></i>
+      <span id="cam-msg">Camera band hai</span>
     </div>
-  </header>
-
-  <!-- ==================== MAIN CONTENT ==================== -->
-  <main class="max-w-3xl w-full mx-auto px-3 sm:px-5 py-4 flex-1 space-y-4">
-
-    <!-- ==================== TAB 1: SCAN ==================== -->
-    <section id="tab-scan" class="space-y-4">
-
-      <!-- Empty TXT Prompt Banner -->
-      <div id="empty-txt-banner" class="hidden bg-indigo-50 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h2 class="text-sm font-extrabold text-indigo-950">Abhi koi TXT file load nahi hai!</h2>
-          <p class="text-xs text-indigo-700 mt-0.5">
-            Apni 2,700 images wali TXT file upload karo ya test karne ke liye Sample Data load karo.
-          </p>
-        </div>
-        <div class="flex items-center gap-2 shrink-0">
-          <button onclick="loadSampleData()" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-xs transition">
-            Load Sample Data
-          </button>
-          <button onclick="switchTab('upload')" class="px-3.5 py-2.5 rounded-xl bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold transition">
-            Upload TXT
-          </button>
-        </div>
-      </div>
-
-      <!-- INSTANT RESULT CARD (RED = FOUND/SKIP | GREEN = NOT FOUND/SHOOT) -->
-      <div id="scan-result-card" class="rounded-2xl border-2 border-dashed border-slate-300 bg-white p-5 text-center transition-colors">
-        <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-2.5">
-          <i data-lucide="scan-line" class="w-6 h-6"></i>
-        </div>
-        <h2 class="text-lg sm:text-xl font-extrabold text-slate-800">Barcode Scan Karo Ya Number Daalo</h2>
-        <p class="text-xs sm:text-sm text-slate-500 mt-1">
-          Scan karte hi turant pata chalega: <strong>Photo Le Liya Hai (Skip)</strong> ya <strong>Photo Lena Hai (Shoot)</strong>.
-        </p>
-      </div>
-
-      <!-- CAMERA BARCODE SCANNER CARD -->
-      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-        <div class="flex items-center justify-between mb-3">
-          <div class="flex items-center gap-2">
-            <i data-lucide="camera" class="w-5 h-5 text-indigo-600"></i>
-            <h3 class="font-bold text-slate-900 text-sm sm:text-base">Mobile Camera Scanner (1D Barcode)</h3>
-          </div>
-          <span id="camera-badge" class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600">
-            Camera Off
-          </span>
-        </div>
-
-        <!-- Camera Viewport -->
-        <div class="relative bg-slate-900 rounded-xl overflow-hidden min-h-[200px] flex items-center justify-center mb-3">
-          <div id="camera-reader" class="w-full"></div>
-          <div id="camera-placeholder" class="text-center p-6 text-slate-400">
-            <i data-lucide="video-off" class="w-9 h-9 mx-auto mb-2 opacity-60"></i>
-            <p class="text-xs font-medium">Rear camera se sticker ka barcode scan karne ke liye niche button dabayein.</p>
-          </div>
-        </div>
-
-        <!-- Camera Buttons (Start / Stop / Torch) -->
-        <div class="flex items-center gap-2">
-          <button id="btn-start-cam" onclick="startCamera()"
-            class="flex-1 py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2">
-            <i data-lucide="play" class="w-4 h-4"></i> Start Camera
-          </button>
-          <button id="btn-stop-cam" onclick="stopCamera()"
-            class="hidden flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-[0.99] text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2">
-            <i data-lucide="square" class="w-4 h-4"></i> Stop Camera
-          </button>
-          <button id="btn-torch" onclick="toggleTorch()"
-            class="hidden py-3 px-4 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-bold text-sm transition flex items-center justify-center gap-1.5"
-            title="Toggle Flash / Torch">
-            <i data-lucide="flashlight" class="w-4 h-4"></i>
-            <span id="torch-label">Flash</span>
-          </button>
-        </div>
-        <p class="text-[11px] text-slate-400 mt-2 text-center">
-          Supports CODE-128, CODE-39, EAN-13, UPC, ITF, CODABAR • 1.5s anti-spam cooldown
-        </p>
-      </div>
-
-      <!-- MANUAL / HARDWARE SCANNER INPUT CARD -->
-      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-        <div class="flex items-center justify-between mb-2.5">
-          <div class="flex items-center gap-2">
-            <i data-lucide="keyboard" class="w-4 h-4 text-indigo-600"></i>
-            <h3 class="font-bold text-slate-900 text-sm">Manual / USB-Bluetooth Scanner Input</h3>
-          </div>
-          <span class="text-[11px] font-bold text-emerald-600">Enter to Match</span>
-        </div>
-
-        <form onsubmit="handleManualSubmit(event)" class="flex gap-2">
-          <div class="relative flex-1">
-            <input id="manual-input" type="text" autocomplete="off"
-              placeholder="Scan ya type karo (e.g. SR.64039/1026 ya 99072)..."
-              class="w-full pl-3.5 pr-9 py-3.5 rounded-xl border-2 border-indigo-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 outline-none text-base font-bold text-slate-900 placeholder:text-slate-400 placeholder:font-medium transition" />
-            <button type="button" onclick="clearManualInput()" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1">
-              <i data-lucide="x" class="w-4 h-4"></i>
-            </button>
-          </div>
-          <button type="submit"
-            class="px-5 py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm shadow-xs transition shrink-0">
-            Check
-          </button>
-        </form>
-
-        <!-- Quick Test Chips -->
-        <div class="mt-3 pt-3 border-t border-slate-100">
-          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Quick Test (Click to Try)</p>
-          <div class="flex flex-wrap gap-1.5">
-            <button onclick="processBarcode('SR.64039/1026')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-xs font-bold text-slate-700 border border-slate-200 transition">
-              SR.64039/1026
-            </button>
-            <button onclick="processBarcode('990720826')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-xs font-bold text-slate-700 border border-slate-200 transition">
-              990720826
-            </button>
-            <button onclick="processBarcode('99075')" class="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-indigo-50 hover:text-indigo-700 text-xs font-bold text-slate-700 border border-slate-200 transition">
-              99075 (Core SR)
-            </button>
-            <button onclick="processBarcode('SR.88888/1126')" class="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-xs font-bold text-emerald-800 border border-emerald-200 transition">
-              SR.88888/1126 (New)
-            </button>
-          </div>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- ==================== TAB 2: UPLOAD TXT ==================== -->
-    <section id="tab-upload" class="hidden space-y-4">
-
-      <!-- Upload Card -->
-      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-4">
-        <div class="flex items-start gap-3">
-          <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
-            <i data-lucide="upload-cloud" class="w-5 h-5"></i>
-          </div>
-          <div>
-            <h2 class="text-base font-extrabold text-slate-900">Apni TXT File Upload Karo</h2>
-            <p class="text-xs text-slate-600 mt-0.5 leading-relaxed">
-              Format example: <code class="px-1.5 py-0.5 bg-slate-100 rounded font-mono text-indigo-700">599_GW_SR.990720826</code> (Price_Category_SR+MMYY).
-              2,700+ lines ek second mein IndexedDB mein save ho jayengi—refresh karne par data gayab nahi hoga.
-            </p>
-          </div>
-        </div>
-
-        <!-- Upload Mode Buttons -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <input id="file-replace-input" type="file" accept=".txt,.csv" class="hidden" onchange="handleTxtUpload(event, 'REPLACE')" />
-            <button onclick="document.getElementById('file-replace-input').click()"
-              class="w-full py-3.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2">
-              <i data-lucide="file-up" class="w-4 h-4"></i> Upload & Replace TXT
-            </button>
-            <p class="text-[11px] text-slate-500 mt-1 text-center">Purana data hata kar nayi TXT load karega</p>
-          </div>
-
-          <div>
-            <input id="file-append-input" type="file" accept=".txt,.csv" class="hidden" onchange="handleTxtUpload(event, 'APPEND')" />
-            <button onclick="document.getElementById('file-append-input').click()"
-              class="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-xs transition flex items-center justify-center gap-2">
-              <i data-lucide="file-plus-2" class="w-4 h-4"></i> Append (Add More) TXT
-            </button>
-            <p class="text-[11px] text-slate-500 mt-1 text-center">Purane data mein naye numbers jodega (No Duplicates)</p>
-          </div>
-        </div>
-
-        <div id="upload-status-box" class="hidden rounded-xl p-3 bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800"></div>
-      </div>
-
-      <!-- Sample Data, Export & Clear Card -->
-      <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
-        <h3 class="text-sm font-extrabold text-slate-900">Data Management & Backup</h3>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-          <button onclick="loadSampleData()"
-            class="py-3 px-3.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5">
-            <i data-lucide="sparkles" class="w-4 h-4"></i> Load Sample Data (5)
-          </button>
-
-          <button onclick="exportUpdatedTxt()"
-            class="py-3 px-3.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5">
-            <i data-lucide="download" class="w-4 h-4"></i> Export Updated TXT
-          </button>
-
-          <button onclick="confirmClearAll()"
-            class="py-3 px-3.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs sm:text-sm transition flex items-center justify-center gap-1.5">
-            <i data-lucide="trash-2" class="w-4 h-4"></i> Clear All Data
-          </button>
-        </div>
-      </div>
-
-    </section>
-
-    <!-- ==================== TAB 3: SEARCH & HISTORY ==================== -->
-    <section id="tab-search" class="hidden space-y-4">
-
-      <!-- Instant Search Across All TXT Records -->
-      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
-            <i data-lucide="search" class="w-4 h-4 text-indigo-600"></i> Search TXT Records
-          </h3>
-          <span id="search-count-label" class="text-xs font-bold text-slate-500">0 items</span>
-        </div>
-
-        <input id="search-input" type="text" oninput="renderSearchResults()"
-          placeholder="Search SR number, Price, Category, or Filename (e.g. 99072, GW, 64039)..."
-          class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-sm font-medium mb-3" />
-
-        <div id="search-results-list" class="divide-y divide-slate-100 max-h-72 overflow-y-auto text-sm">
-          <p class="text-xs text-slate-400 py-4 text-center">No records loaded.</p>
-        </div>
-      </div>
-
-      <!-- Today's Scan History -->
-      <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs">
-        <div class="flex items-center justify-between mb-3">
-          <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
-            <i data-lucide="history" class="w-4 h-4 text-indigo-600"></i> Aaj Ki Scan History (Today)
-          </h3>
-          <button onclick="confirmClearHistory()" class="text-xs font-bold text-rose-600 hover:underline">
-            Clear History
-          </button>
-        </div>
-
-        <div id="history-list" class="divide-y divide-slate-100 max-h-80 overflow-y-auto text-sm">
-          <p class="text-xs text-slate-400 py-4 text-center">Abhi tak koi scan nahi hua hai.</p>
-        </div>
-      </div>
-
-    </section>
-
-  </main>
-
-  <!-- ==================== CUSTOM CONFIRM MODAL (No alert/confirm) ==================== -->
-  <div id="modal-overlay" class="hidden fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200">
-      <h3 id="modal-title" class="text-base font-extrabold text-slate-900">Confirm</h3>
-      <p id="modal-body" class="text-sm text-slate-600 mt-1.5">Are you sure?</p>
-      <div class="flex items-center justify-end gap-2 mt-5">
-        <button onclick="closeModal()" class="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-bold text-xs sm:text-sm hover:bg-slate-50">
-          Cancel
-        </button>
-        <button id="modal-confirm-btn" class="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs sm:text-sm">
-          Confirm
-        </button>
-      </div>
+    <div class="absolute top-2 right-2 flex gap-1.5 z-10">
+      <button id="btn-torch" onclick="toggleTorch()" class="hidden px-2.5 py-1.5 rounded-lg bg-amber-400 text-amber-950 text-xs font-extrabold">Flash</button>
+      <button id="btn-cam" onclick="toggleCamera()" class="px-2.5 py-1.5 rounded-lg bg-white/90 text-slate-900 text-xs font-extrabold">Start</button>
     </div>
   </div>
 
-  <!-- ==================== TOAST CONTAINER ==================== -->
-  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-xs pointer-events-none"></div>
+  <!-- Manual / USB scanner input -->
+  <form onsubmit="handleManual(event)" class="shrink-0 bg-white border-y border-slate-200 p-2 flex gap-2">
+    <input id="manual-input" type="text" autocomplete="off" placeholder="Number type karo ya USB scanner (SR.64039/1026)"
+      class="flex-1 min-w-0 px-3 py-2.5 rounded-lg border-2 border-slate-200 focus:border-indigo-600 outline-none text-sm font-bold" />
+    <button class="px-4 rounded-lg bg-indigo-600 text-white text-sm font-extrabold">Check</button>
+  </form>
 
-  <!-- ==================== APPLICATION LOGIC ==================== -->
-  <script>
-    /*************************************************************************
-     * 1. STATE & O(1) HASH MAP INDEXES
-     *************************************************************************/
-    const DB_NAME = 'SmartTxtBarcodeMatcherDB';
-    const DB_VERSION = 1;
-    let db = null;
+  <!-- Result area: separate from camera, fills remaining space -->
+  <div id="result-area" class="flex-1 min-h-0 relative overflow-hidden bg-slate-200">
+    <div id="idle" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-center px-6">
+      <i data-lucide="scan-line" class="w-10 h-10 mb-2 opacity-60"></i>
+      <p class="text-sm font-bold">Scan ke liye ready</p>
+      <p id="no-data-hint" class="hidden text-xs mt-1 text-rose-600 font-semibold">Pehle "File" tab me TXT/CSV upload karo</p>
+    </div>
+  </div>
+</section>
 
-    let txtRecords = [];   // Array of parsed record objects
-    let scanHistory = [];  // Array of scan log objects
-    let soundEnabled = true;
-    let activeTab = 'scan';
+<!-- ================= FILE TAB ================= -->
+<section id="tab-upload" class="hidden flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+  <div class="bg-white rounded-2xl border border-slate-200 p-4 space-y-3">
+    <h2 class="font-extrabold text-base">Data File Upload</h2>
+    <p class="text-xs text-slate-600 leading-relaxed">
+      <b>CSV (Google Sheet se)</b>: columns <code class="bg-slate-100 px-1 rounded">Item Name, Product Image URL, Collection Type, Category</code> — isme photo preview bhi aata hai.<br>
+      <b>TXT</b>: ek line me ek file name (preview nahi aayega).<br>
+      Same naam ki multiple images (jaise <code class="bg-slate-100 px-1 rounded">WR_SR.960530526</code> aur <code class="bg-slate-100 px-1 rounded">WR_SR.960530526 (1)</code>) ek hi number ke neeche group ho jayengi.
+    </p>
+    <input id="f-replace" type="file" accept=".txt,.csv" class="hidden" onchange="handleFile(event,'REPLACE')" />
+    <input id="f-append" type="file" accept=".txt,.csv" class="hidden" onchange="handleFile(event,'APPEND')" />
+    <div class="grid grid-cols-2 gap-2">
+      <button onclick="document.getElementById('f-replace').click()" class="py-3 rounded-xl bg-indigo-600 text-white text-sm font-bold">Upload & Replace</button>
+      <button onclick="document.getElementById('f-append').click()" class="py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold">Append (Add More)</button>
+    </div>
+    <div id="upload-status" class="hidden rounded-xl p-3 bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800"></div>
+  </div>
+  <div class="bg-white rounded-2xl border border-slate-200 p-4 grid grid-cols-3 gap-2">
+    <button onclick="loadSample()" class="py-3 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-bold">Sample</button>
+    <button onclick="exportTxt()" class="py-3 rounded-xl bg-slate-800 text-white text-xs font-bold">Export TXT</button>
+    <button onclick="confirmClearAll()" class="py-3 rounded-xl bg-rose-50 text-rose-700 border border-rose-200 text-xs font-bold">Clear All</button>
+  </div>
+</section>
 
-    // Ultra-fast O(1) lookup maps
-    const fullMap = new Map();     // Full uppercase filename -> record
-    const srNormMap = new Map();   // Normalized SR tokens (SR.990720826, SR990720826, 990720826) -> record
-    const coreSrMap = new Map();   // Core SR digits without trailing 4-digit MMYY (99072) -> record
+<!-- ================= SEARCH / HISTORY TAB ================= -->
+<section id="tab-search" class="hidden flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+  <div class="bg-white rounded-2xl border border-slate-200 p-3">
+    <div class="flex justify-between mb-2"><h3 class="font-extrabold text-sm">Search</h3><span id="search-count" class="text-xs font-bold text-slate-500"></span></div>
+    <input id="search-input" oninput="renderSearch()" placeholder="Number, category ya naam..." class="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm font-medium mb-2 outline-none focus:border-indigo-500" />
+    <div id="search-list" class="divide-y divide-slate-100 max-h-72 overflow-y-auto"></div>
+  </div>
+  <div class="bg-white rounded-2xl border border-slate-200 p-3">
+    <div class="flex justify-between mb-2"><h3 class="font-extrabold text-sm">Aaj ki History</h3>
+      <button onclick="confirmClearHistory()" class="text-xs font-bold text-rose-600">Clear</button></div>
+    <div id="history-list" class="divide-y divide-slate-100 max-h-80 overflow-y-auto"></div>
+  </div>
+</section>
 
-    // Camera state
-    let html5QrCode = null;
-    let isCameraRunning = false;
-    let isTorchOn = false;
-    let lastCamScan = { code: '', time: 0 };
-    const SCAN_COOLDOWN_MS = 1500;
+<!-- BOTTOM NAV -->
+<nav class="shrink-0 bg-white border-t border-slate-200 grid grid-cols-3">
+  <button id="nav-scan" onclick="switchTab('scan')" class="py-3 flex flex-col items-center text-[11px] font-bold"><i data-lucide="camera" class="w-5 h-5"></i>Scan</button>
+  <button id="nav-upload" onclick="switchTab('upload')" class="py-3 flex flex-col items-center text-[11px] font-bold"><i data-lucide="file-text" class="w-5 h-5"></i>File</button>
+  <button id="nav-search" onclick="switchTab('search')" class="py-3 flex flex-col items-center text-[11px] font-bold"><i data-lucide="search" class="w-5 h-5"></i>Search</button>
+</nav>
 
-    // Hardware scanner keyboard buffer
-    let hwBuffer = '';
-    let hwLastTime = 0;
+<!-- Modal -->
+<div id="modal" class="hidden fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl max-w-sm w-full p-5">
+    <h3 id="modal-title" class="font-extrabold"></h3>
+    <p id="modal-body" class="text-sm text-slate-600 mt-1"></p>
+    <div class="flex justify-end gap-2 mt-4">
+      <button onclick="closeModal()" class="px-4 py-2 rounded-lg border text-sm font-bold">Cancel</button>
+      <button id="modal-ok" class="px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-bold">Confirm</button>
+    </div>
+  </div>
+</div>
+<div id="toasts" class="fixed top-14 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 pointer-events-none"></div>
 
-    // Web Audio API Context
-    let audioCtx = null;
+<script>
+/* ============ STATE ============ */
+const DB_NAME='BarcodeMatcherV2', DB_VER=1;
+let db=null, records=[], history=[], soundOn=true, activeTab='scan';
+const groupMap=new Map();  // full digits (e.g. 960450526) -> [records]  (ALL images of that number)
+const coreMap=new Map();   // digits minus last 4 (MMYY)  -> [records]
+let qr=null, camOn=false, torchOn=false, lastCam={code:'',t:0}, hideTimer=null, audioCtx=null;
+const COOLDOWN=1500, AUTO_HIDE_MS=6000;
 
-    /*************************************************************************
-     * 2. WEB AUDIO API FEEDBACK (Double-Beep for Found, Chime for Not Found)
-     *************************************************************************/
-    function getAudioCtx() {
-      if (!audioCtx) {
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (AC) audioCtx = new AC();
-      }
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-      return audioCtx;
+/* ============ SOUND: green = single chime, red = double buzz ============ */
+function ac(){ if(!audioCtx){const A=window.AudioContext||window.webkitAudioContext; if(A) audioCtx=new A();} if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume(); return audioCtx; }
+function beep(freq,start,dur,type,vol){const c=ac(); if(!c) return; const o=c.createOscillator(),g=c.createGain(); o.type=type; o.frequency.value=freq;
+  g.gain.setValueAtTime(vol,c.currentTime+start); g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+start+dur);
+  o.connect(g); g.connect(c.destination); o.start(c.currentTime+start); o.stop(c.currentTime+start+dur+0.01);}
+function playSound(found){ if(!soundOn) return; try{
+  if(found){ beep(1046,0,.22,'sine',.2); }
+  else { beep(300,0,.14,'sawtooth',.18); beep(240,.17,.16,'sawtooth',.18); }
+  if(navigator.vibrate) navigator.vibrate(found?60:[90,60,90]);
+}catch(e){} }
+function toggleSound(){ soundOn=!soundOn; document.getElementById('sound-icon').setAttribute('data-lucide',soundOn?'volume-2':'volume-x'); lucide.createIcons(); }
+
+/* ============ PARSING ============ */
+function driveId(url){ if(!url) return ''; const m=url.match(/[?&]id=([\w-]+)/)||url.match(/\/d\/([\w-]+)/); return m?m[1]:''; }
+
+// name examples: "599_GW_SR.990720826", "WR_SR.960530526 (1)", "SR.64039/1026"
+function parseRecord(name, extra={}){
+  let raw=(name||'').trim().replace(/\.(jpe?g|png|webp|gif|bmp|heic)$/i,'').trim();
+  if(!raw) return null;
+  // strip duplicate suffix " (1)" / " (2)" so same-number images group together
+  const base=raw.replace(/\s*\(\d+\)\s*$/,'').replace(/\s*-\s*copy$/i,'').trim();
+  const upper=base.toUpperCase();
+  const parts=upper.split('_');
+  let price='-', category='-', srRaw=upper;
+  if(parts.length>=3){ price=parts[0]; category=parts.slice(1,-1).join('_'); srRaw=parts[parts.length-1]; }
+  else if(parts.length===2){ if(/^\d+$/.test(parts[0])) price=parts[0]; else category=parts[0]; srRaw=parts[1]; }
+  const digitsOnly=srRaw.replace(/[^A-Z0-9]/g,'').replace(/\D/g,'');
+  const coreDigits=digitsOnly.length>=8?digitsOnly.slice(0,-4):digitsOnly;
+  const id=extra.imageUrl?driveId(extra.imageUrl):'';
+  return {
+    v:2, uid:raw.toUpperCase()+'|'+id,        // unique per image, even if names repeat
+    raw, price, category: extra.category||category, collection: extra.collection||'',
+    srRaw, digitsOnly, coreDigits, imageUrl: extra.imageUrl||'', driveId:id
+  };
+}
+
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,'');
+  const rows=[]; let row=[], cur='', q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c==='"') q=true;
+    else if(c===','||c==='\t'){ row.push(cur); cur=''; }
+    else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(cur); cur=''; rows.push(row); row=[]; }
+    else cur+=c;
+  }
+  if(cur!==''||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()));
+}
+
+function parseFileText(text, filename){
+  const isCsv=/\.csv$/i.test(filename)||/Product Image URL/i.test(text.slice(0,300));
+  const out=[];
+  if(isCsv){
+    const rows=parseCSV(text); if(!rows.length) return out;
+    const head=rows[0].map(h=>h.trim().toLowerCase());
+    const find=(...k)=>head.findIndex(h=>k.some(x=>h.includes(x)));
+    let iN=find('item name','name'), iU=find('image url','url'), iCol=find('collection'), iCat=find('category');
+    let start=1;
+    if(iN<0){ iN=0; iU=1; iCol=2; iCat=3; start=0; }
+    for(let r=start;r<rows.length;r++){
+      const row=rows[r];
+      const rec=parseRecord(row[iN],{imageUrl:(row[iU]||'').trim(),collection:(row[iCol]||'').trim(),category:(row[iCat]||'').trim().toUpperCase()});
+      if(rec) out.push(rec);
     }
-
-    function playSound(type) {
-      if (!soundEnabled) return;
-      try {
-        const ctx = getAudioCtx();
-        if (!ctx) return;
-        const now = ctx.currentTime;
-
-        if (type === 'FOUND') {
-          // Distinct double-beep alert (Skip piece!)
-          [320, 260].forEach((freq, idx) => {
-            const osc = ctx.createOscillator();
-            const gain = ctx.createGain();
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(freq, now + idx * 0.14);
-            gain.gain.setValueAtTime(0.18, now + idx * 0.14);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.12);
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start(now + idx * 0.14);
-            osc.stop(now + idx * 0.14 + 0.13);
-          });
-        } else {
-          // Crisp single chime (Not found -> Shoot piece!)
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(1046.5, now); // C6 crisp chime
-          gain.gain.setValueAtTime(0.2, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start(now);
-          osc.stop(now + 0.26);
-        }
-      } catch (e) {}
-    }
-
-    function toggleSound() {
-      soundEnabled = !soundEnabled;
-      document.getElementById('sound-icon').setAttribute('data-lucide', soundEnabled ? 'volume-2' : 'volume-x');
-      document.getElementById('sound-label').textContent = soundEnabled ? 'Sound ON' : 'Sound OFF';
-      lucide.createIcons();
-      if (soundEnabled) playSound('NOT_FOUND');
-    }
-
-    /*************************************************************************
-     * 3. PARSER & O(1) SMART MATCHING ENGINE
-     *    Format: 599_GW_SR.990720826 (Price_Category_SR+MMYY)
-     *************************************************************************/
-    function parseTxtLine(rawLine) {
-      let cleaned = (rawLine || '').trim();
-      if (!cleaned) return null;
-
-      // Strip common image extensions
-      cleaned = cleaned.replace(/\.(jpe?g|png|webp|gif|bmp|heic)$/i, '').trim();
-      if (!cleaned) return null;
-
-      const upper = cleaned.toUpperCase();
-      const parts = upper.split('_');
-
-      let price = '-';
-      let category = '-';
-      let srRaw = upper;
-
-      if (parts.length >= 3) {
-        price = parts[0];
-        category = parts.slice(1, -1).join('_');
-        srRaw = parts[parts.length - 1];
-      } else if (parts.length === 2) {
-        price = parts[0];
-        srRaw = parts[1];
-      }
-
-      // Normalize SR token (e.g. SR.990720826 -> srNoPunct: SR990720826, digitsOnly: 990720826)
-      const srNoSlash = srRaw.replace(/[\/\-\s]/g, '');
-      const srNoPunct = srNoSlash.replace(/[^A-Z0-9]/g, '');
-      const digitsOnly = srNoPunct.replace(/\D/g, '');
-
-      // Extract core SR digits without trailing 4-digit MMYY (e.g. 990720826 -> 99072, 640391026 -> 64039)
-      let coreDigits = digitsOnly;
-      if (digitsOnly.length >= 8) {
-        coreDigits = digitsOnly.slice(0, -4);
-      }
-
-      return {
-        raw: cleaned,
-        upper,
-        price,
-        category,
-        srRaw,
-        srNoSlash,
-        srNoPunct,
-        digitsOnly,
-        coreDigits,
-      };
-    }
-
-    function rebuildHashMaps() {
-      fullMap.clear();
-      srNormMap.clear();
-      coreSrMap.clear();
-
-      for (const rec of txtRecords) {
-        fullMap.set(rec.upper, rec);
-        if (rec.srRaw) srNormMap.set(rec.srRaw, rec);
-        if (rec.srNoSlash) srNormMap.set(rec.srNoSlash, rec);
-        if (rec.srNoPunct) srNormMap.set(rec.srNoPunct, rec);
-        if (rec.digitsOnly) srNormMap.set(rec.digitsOnly, rec);
-        if (rec.coreDigits && rec.coreDigits.length >= 4 && !coreSrMap.has(rec.coreDigits)) {
-          coreSrMap.set(rec.coreDigits, rec);
-        }
-      }
-    }
-
-    /**
-     * Ultra-fast matching for scanned barcodes like:
-     * "SR.64039/1026", "64039/1026", "640391026", "SR.640391026", "64039"
-     */
-    function matchScannedCode(rawScanned) {
-      const upper = (rawScanned || '').trim().toUpperCase();
-      if (!upper) return null;
-
-      // Normalize by removing '/', '-', spaces
-      const norm = upper.replace(/[\/\-\s]/g, '');
-      const alnum = norm.replace(/[^A-Z0-9]/g, '');
-      const digits = alnum.replace(/\D/g, '');
-
-      // 1. Exact full filename match
-      if (fullMap.has(upper)) return { record: fullMap.get(upper), matchType: 'Exact Filename' };
-
-      // 2. Exact / Normalized SR match
-      if (srNormMap.has(norm)) return { record: srNormMap.get(norm), matchType: 'Exact SR Match' };
-      if (srNormMap.has(alnum)) return { record: srNormMap.get(alnum), matchType: 'Normalized SR Match' };
-      if (digits && srNormMap.has(digits)) return { record: srNormMap.get(digits), matchType: 'SR Digits Match' };
-
-      // 3. Core SR digits match (without trailing 4-digit MMYY)
-      if (digits && coreSrMap.has(digits)) {
-        return { record: coreSrMap.get(digits), matchType: 'Core SR Match' };
-      }
-      if (digits.length >= 8) {
-        const scannedCore = digits.slice(0, -4);
-        if (coreSrMap.has(scannedCore)) {
-          return { record: coreSrMap.get(scannedCore), matchType: `Core SR Match (#${scannedCore})` };
-        }
-      }
-
-      // 4. Safe substring match (length >= 5)
-      if (digits.length >= 5) {
-        for (const rec of txtRecords) {
-          if (
-            (rec.digitsOnly && rec.digitsOnly.includes(digits)) ||
-            (rec.coreDigits && rec.coreDigits.length >= 5 && digits.includes(rec.coreDigits))
-          ) {
-            return { record: rec, matchType: 'Partial SR Match' };
-          }
-        }
-      }
-
-      return null;
-    }
-
-    /*************************************************************************
-     * 4. INDEXEDDB PERSISTENCE
-     *************************************************************************/
-    function initDB() {
-      return new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VERSION);
-        req.onupgradeneeded = (e) => {
-          const d = e.target.result;
-          if (!d.objectStoreNames.contains('txt_records')) {
-            d.createObjectStore('txt_records', { keyPath: 'upper' });
-          }
-          if (!d.objectStoreNames.contains('scan_history')) {
-            d.createObjectStore('scan_history', { keyPath: 'id', autoIncrement: true });
-          }
-        };
-        req.onsuccess = (e) => {
-          db = e.target.result;
-          resolve(db);
-        };
-        req.onerror = (e) => reject(e.target.error);
-      });
-    }
-
-    function dbGetAll(storeName) {
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readonly');
-        const req = tx.objectStore(storeName).getAll();
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    function dbPut(storeName, obj) {
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readwrite');
-        const req = tx.objectStore(storeName).put(obj);
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    function dbBatchPut(storeName, items) {
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readwrite');
-        const store = tx.objectStore(storeName);
-        for (const item of items) store.put(item);
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => reject(tx.error);
-      });
-    }
-
-    function dbClear(storeName) {
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(storeName, 'readwrite');
-        const req = tx.objectStore(storeName).clear();
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-      });
-    }
-
-    async function refreshAllData() {
-      txtRecords = await dbGetAll('txt_records');
-      scanHistory = (await dbGetAll('scan_history')).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      rebuildHashMaps();
-      updateHeaderBadges();
-      renderSearchResults();
-      renderHistoryList();
-
-      document.getElementById('empty-txt-banner').classList.toggle('hidden', txtRecords.length > 0);
-    }
-
-    /*************************************************************************
-     * 5. SCAN PROCESSING & VISUAL RESULT CARDS
-     *************************************************************************/
-    async function processBarcode(rawCode) {
-      const clean = (rawCode || '').trim();
-      if (!clean) return;
-
-      const match = matchScannedCode(clean);
-      const nowIso = new Date().toISOString();
-
-      const logItem = {
-        rawScanned: clean,
-        found: !!match,
-        matchedFile: match ? match.record.raw : '',
-        timestamp: nowIso,
-      };
-      logItem.id = await dbPut('scan_history', logItem);
-      scanHistory.unshift(logItem);
-
-      if (match) {
-        playSound('FOUND');
-        renderResultCard(true, clean, match.record, match.matchType);
-      } else {
-        playSound('NOT_FOUND');
-        renderResultCard(false, clean, null, null);
-      }
-
-      updateHeaderBadges();
-      if (activeTab === 'search') renderHistoryList();
-    }
-
-    function renderResultCard(isFound, rawScanned, record, matchType) {
-      const card = document.getElementById('scan-result-card');
-
-      if (isFound) {
-        // RED ALERT CARD: ALREADY IN TXT -> SKIP
-        card.className = 'rounded-2xl border-2 border-rose-600 bg-rose-600 text-white p-5 shadow-lg text-left';
-        card.innerHTML = `
-          <div class="flex items-start gap-3.5">
-            <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-              <i data-lucide="hand" class="w-7 h-7 text-white"></i>
-            </div>
-            <div class="min-w-0 flex-1">
-              <span class="inline-block px-2 py-0.5 rounded-full bg-white/20 text-[11px] font-extrabold uppercase tracking-wider mb-1">
-                ${escapeHtml(matchType)}
-              </span>
-              <h2 class="text-xl sm:text-2xl font-black leading-tight">
-                PHOTO LE LIYA HAI! (ALREADY IN TXT)
-              </h2>
-              <p class="text-sm sm:text-base font-extrabold text-rose-100 mt-0.5">
-                SKIP KARO — DUSRA PIECE UTHAO
-              </p>
-
-              <div class="mt-3 p-3 rounded-xl bg-black/20 space-y-1 text-xs sm:text-sm">
-                <div class="font-mono font-bold text-white break-all">
-                  Matched TXT: ${escapeHtml(record.raw)}
-                </div>
-                <div class="flex flex-wrap gap-x-4 gap-y-1 text-rose-100 font-semibold">
-                  <span>Price: <strong class="text-white">${escapeHtml(record.price)}</strong></span>
-                  <span>Category: <strong class="text-white">${escapeHtml(record.category)}</strong></span>
-                  <span>SR: <strong class="text-white">${escapeHtml(record.srRaw)}</strong></span>
-                </div>
-                <div class="text-[11px] text-rose-200 pt-1 border-t border-white/10">
-                  Raw Scanned: <span class="font-mono font-bold text-white">${escapeHtml(rawScanned)}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        `;
-      } else {
-        // GREEN ACTION CARD: NOT IN TXT -> SHOOT
-        card.className = 'rounded-2xl border-2 border-emerald-600 bg-emerald-600 text-white p-5 shadow-lg text-left';
-        card.innerHTML = `
-          <div class="flex flex-col gap-3.5">
-            <div class="flex items-start gap-3.5">
-              <div class="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-                <i data-lucide="camera" class="w-7 h-7 text-white"></i>
-              </div>
-              <div class="min-w-0 flex-1">
-                <span class="inline-block px-2 py-0.5 rounded-full bg-white/20 text-[11px] font-extrabold uppercase tracking-wider mb-1">
-                  New Piece
-                </span>
-                <h2 class="text-xl sm:text-2xl font-black leading-tight">
-                  NUMBER NAHI MILA! (NOT IN TXT)
-                </h2>
-                <p class="text-sm sm:text-base font-extrabold text-emerald-100 mt-0.5">
-                  ISKA PHOTO LO / SHOOT KARO
-                </p>
-                <div class="mt-2.5 p-2.5 rounded-xl bg-black/20 text-xs sm:text-sm">
-                  Raw Scanned: <span class="font-mono font-bold text-white break-all">${escapeHtml(rawScanned)}</span>
-                </div>
-              </div>
-            </div>
-
-            <button onclick="markAsShot('${escapeJs(rawScanned)}')"
-              class="w-full py-3 px-4 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 font-extrabold text-sm shadow-sm transition flex items-center justify-center gap-2">
-              <i data-lucide="plus-circle" class="w-4 h-4"></i> + Mark as Shot (Add to List)
-            </button>
-          </div>
-        `;
-      }
-      lucide.createIcons();
-    }
-
-    async function markAsShot(rawScanned) {
-      const rec = parseTxtLine(rawScanned);
-      if (!rec) return;
-
-      await dbPut('txt_records', rec);
-      await refreshAllData();
-      playSound('NOT_FOUND');
-      showToast(`"${rec.raw}" list mein add ho gaya!`, 'success');
-
-      const card = document.getElementById('scan-result-card');
-      card.className = 'rounded-2xl border-2 border-indigo-600 bg-indigo-600 text-white p-5 shadow-lg text-left';
-      card.innerHTML = `
-        <div class="flex items-center gap-3">
-          <div class="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-            <i data-lucide="check" class="w-6 h-6 text-white"></i>
-          </div>
-          <div>
-            <h2 class="text-lg font-black">LIST MEIN SAVE HO GAYA!</h2>
-            <p class="text-xs sm:text-sm text-indigo-100 mt-0.5">
-              <span class="font-mono font-bold text-white">${escapeHtml(rec.raw)}</span> ab TXT list mein add hai. Agla piece scan karo!
-            </p>
-          </div>
-        </div>
-      `;
-      lucide.createIcons();
-    }
-
-    /*************************************************************************
-     * 6. CAMERA SCANNER (1D BARCODES + TORCH + 1.5s COOLDOWN)
-     *************************************************************************/
-    async function startCamera() {
-      if (isCameraRunning) return;
-      const badge = document.getElementById('camera-badge');
-      const placeholder = document.getElementById('camera-placeholder');
-
-      try {
-        placeholder.classList.add('hidden');
-        badge.textContent = 'Starting...';
-        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800';
-
-        html5QrCode = new Html5Qrcode('camera-reader', {
-          formatsToSupport: [
-            Html5QrcodeSupportedFormats.CODE_128,
-            Html5QrcodeSupportedFormats.CODE_39,
-            Html5QrcodeSupportedFormats.EAN_13,
-            Html5QrcodeSupportedFormats.EAN_8,
-            Html5QrcodeSupportedFormats.UPC_A,
-            Html5QrcodeSupportedFormats.UPC_E,
-            Html5QrcodeSupportedFormats.ITF,
-            Html5QrcodeSupportedFormats.CODABAR,
-          ],
-          verbose: false,
-        });
-
-        await html5QrCode.start(
-          { facingMode: 'environment' },
-          {
-            fps: 12,
-            // Wide rectangular box ideal for 1D garment tag barcodes
-            qrbox: (vw, vh) => ({
-              width: Math.min(Math.floor(vw * 0.85), 320),
-              height: Math.min(Math.floor(vh * 0.45), 120),
-            }),
-          },
-          (decodedText) => {
-            const now = Date.now();
-            if (decodedText === lastCamScan.code && now - lastCamScan.time < SCAN_COOLDOWN_MS) {
-              return;
-            }
-            lastCamScan = { code: decodedText, time: now };
-            processBarcode(decodedText);
-          },
-          () => {}
-        );
-
-        isCameraRunning = true;
-        isTorchOn = false;
-        document.getElementById('btn-start-cam').classList.add('hidden');
-        document.getElementById('btn-stop-cam').classList.remove('hidden');
-        badge.textContent = 'Camera Active';
-        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700';
-
-        // Check if Torch/Flash is supported on this device
-        try {
-          const caps = html5QrCode.getRunningTrackCapabilities();
-          if (caps && caps.torch) {
-            document.getElementById('btn-torch').classList.remove('hidden');
-          }
-        } catch (e) {}
-      } catch (err) {
-        placeholder.classList.remove('hidden');
-        badge.textContent = 'Camera Error';
-        badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700';
-        showToast('Camera access nahi mila. HTTPS (GitHub Pages) par open karke permission allow karein.', 'error');
-      }
-    }
-
-    async function stopCamera() {
-      if (!isCameraRunning || !html5QrCode) return;
-      try {
-        await html5QrCode.stop();
-        html5QrCode.clear();
-      } catch (e) {}
-      isCameraRunning = false;
-      isTorchOn = false;
-      document.getElementById('camera-placeholder').classList.remove('hidden');
-      document.getElementById('btn-start-cam').classList.remove('hidden');
-      document.getElementById('btn-stop-cam').classList.add('hidden');
-      document.getElementById('btn-torch').classList.add('hidden');
-      const badge = document.getElementById('camera-badge');
-      badge.textContent = 'Camera Off';
-      badge.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600';
-    }
-
-    async function toggleTorch() {
-      if (!isCameraRunning || !html5QrCode) return;
-      try {
-        isTorchOn = !isTorchOn;
-        await html5QrCode.applyVideoConstraints({ advanced: [{ torch: isTorchOn }] });
-        document.getElementById('torch-label').textContent = isTorchOn ? 'Flash ON' : 'Flash';
-      } catch (e) {
-        showToast('Torch/Flash is device par support nahi hai.', 'info');
-      }
-    }
-
-    /*************************************************************************
-     * 7. MANUAL & HARDWARE SCANNER INPUT
-     *************************************************************************/
-    function handleManualSubmit(e) {
-      e.preventDefault();
-      const input = document.getElementById('manual-input');
-      const val = input.value.trim();
-      if (val) {
-        processBarcode(val);
-        input.value = '';
-        input.focus();
-      }
-    }
-
-    function clearManualInput() {
-      const input = document.getElementById('manual-input');
-      input.value = '';
-      input.focus();
-    }
-
-    // Global listener for USB/Bluetooth hardware barcode scanners
-    window.addEventListener('keydown', (e) => {
-      if (activeTab !== 'scan') return;
-      const t = e.target;
-      if (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') return;
-
-      const now = Date.now();
-      if (now - hwLastTime > 120) hwBuffer = '';
-      hwLastTime = now;
-
-      if (e.key === 'Enter') {
-        if (hwBuffer.length >= 2) {
-          e.preventDefault();
-          const code = hwBuffer.trim();
-          hwBuffer = '';
-          processBarcode(code);
-        }
-      } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-        hwBuffer += e.key;
-      }
-    });
-
-    /*************************************************************************
-     * 8. TXT UPLOAD, SAMPLE DATA, EXPORT & CLEAR
-     *************************************************************************/
-    async function handleTxtUpload(event, mode) {
-      const file = event.target.files?.[0];
-      if (!file) return;
-
-      const text = await file.text();
-      const lines = text.split(/\r?\n/);
-      const parsedMap = new Map();
-
-      for (const line of lines) {
-        const rec = parseTxtLine(line);
-        if (rec) parsedMap.set(rec.upper, rec);
-      }
-
-      const newRecords = Array.from(parsedMap.values());
-      if (newRecords.length === 0) {
-        showToast('TXT file mein koi valid line nahi mili.', 'error');
-        event.target.value = '';
-        return;
-      }
-
-      if (mode === 'REPLACE') {
-        await dbClear('txt_records');
-      }
-      await dbBatchPut('txt_records', newRecords);
-      await refreshAllData();
-
-      const statusBox = document.getElementById('upload-status-box');
-      statusBox.classList.remove('hidden');
-      statusBox.textContent =
-        mode === 'REPLACE'
-          ? `Success! ${newRecords.length.toLocaleString()} unique records load ho gaye.`
-          : `Success! ${newRecords.length.toLocaleString()} lines process hui. Total records: ${txtRecords.length.toLocaleString()}.`;
-
-      showToast(`${newRecords.length.toLocaleString()} TXT records saved!`, 'success');
-      event.target.value = '';
-    }
-
-    async function loadSampleData() {
-      const samples = [
-        '599_GW_SR.990720826',
-        '599_GW_SR.990750826',
-        '599_GW_SR.990710826',
-        '599_GW_SR.990670826',
-        '735_DR_SR.640391026',
-      ];
-      const parsed = samples.map(parseTxtLine).filter(Boolean);
-      await dbBatchPut('txt_records', parsed);
-      await refreshAllData();
-      playSound('NOT_FOUND');
-      showToast('5 Sample records load ho gaye! Ab scan ya test chips try karo.', 'success');
-    }
-
-    function exportUpdatedTxt() {
-      if (txtRecords.length === 0) {
-        showToast('Export karne ke liye koi data nahi hai.', 'error');
-        return;
-      }
-      const content = txtRecords.map((r) => r.raw).join('\n');
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `updated-images-list-${new Date().toISOString().slice(0, 10)}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast(`Exported ${txtRecords.length.toLocaleString()} records to TXT!`, 'success');
-    }
-
-    function confirmClearAll() {
-      openModal(
-        'Clear All TXT Data?',
-        'Saare uploaded TXT records delete ho jayenge. Kya aap sure hain?',
-        async () => {
-          await dbClear('txt_records');
-          await refreshAllData();
-          showToast('Saara TXT data clear ho gaya.', 'info');
-        }
-      );
-    }
-
-    function confirmClearHistory() {
-      openModal(
-        'Clear Scan History?',
-        'Aaj ki aur purani scan history delete ho jayegi.',
-        async () => {
-          await dbClear('scan_history');
-          await refreshAllData();
-          showToast('Scan history clear ho gayi.', 'info');
-        }
-      );
-    }
-
-    /*************************************************************************
-     * 9. SEARCH, HISTORY & UI HELPERS
-     *************************************************************************/
-    function isToday(iso) {
-      if (!iso) return false;
-      const d = new Date(iso);
-      const n = new Date();
-      return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
-    }
-
-    function updateHeaderBadges() {
-      document.getElementById('header-record-badge').textContent = `${txtRecords.length.toLocaleString()} TXT Records`;
-      const todayCount = scanHistory.filter((h) => isToday(h.timestamp)).length;
-      document.getElementById('header-today-badge').textContent = `${todayCount} Scans Today`;
-    }
-
-    function renderSearchResults() {
-      const q = (document.getElementById('search-input')?.value || '').trim().toUpperCase();
-      const listEl = document.getElementById('search-results-list');
-      const countEl = document.getElementById('search-count-label');
-
-      const filtered = q
-        ? txtRecords.filter((r) => r.upper.includes(q) || r.digitsOnly.includes(q) || r.srRaw.includes(q))
-        : txtRecords;
-
-      countEl.textContent = `${filtered.length.toLocaleString()} items`;
-
-      if (filtered.length === 0) {
-        listEl.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Koi matching record nahi mila.</p>`;
-        return;
-      }
-
-      // Render top 100 for instant 60fps scrolling on mobile
-      listEl.innerHTML = filtered.slice(0, 100).map((r) => `
-        <div class="py-2.5 flex items-center justify-between gap-2">
+  } else {
+    for(const line of text.split(/\r?\n/)){ const rec=parseRecord(line); if(rec) out.push(rec); }
+  }
+  return out;
+}
+
+/* ============ INDEX + MATCH ============ */
+function rebuild(){
+  groupMap.clear(); coreMap.clear();
+  for(const r of records){
+    if(r.digitsOnly){ if(!groupMap.has(r.digitsOnly)) groupMap.set(r.digitsOnly,[]); groupMap.get(r.digitsOnly).push(r); }
+    if(r.coreDigits&&r.coreDigits.length>=4){ if(!coreMap.has(r.coreDigits)) coreMap.set(r.coreDigits,[]); coreMap.get(r.coreDigits).push(r); }
+  }
+}
+// returns {list:[records], type} or null. No fuzzy/partial matching -> no false "green".
+function match(scanned){
+  const digits=(scanned||'').toUpperCase().replace(/[^A-Z0-9]/g,'').replace(/\D/g,'');
+  if(!digits) return null;
+  if(groupMap.has(digits)) return {list:groupMap.get(digits),type:'Exact'};
+  if(coreMap.has(digits)) return {list:coreMap.get(digits),type:'Core SR'};
+  if(digits.length>=8){ const c=digits.slice(0,-4); if(coreMap.has(c)) return {list:coreMap.get(c),type:'Core SR'}; }
+  return null;
+}
+
+/* ============ INDEXEDDB ============ */
+function initDB(){ return new Promise((res,rej)=>{ const rq=indexedDB.open(DB_NAME,DB_VER);
+  rq.onupgradeneeded=e=>{const d=e.target.result; d.createObjectStore('records',{keyPath:'uid'}); d.createObjectStore('history',{keyPath:'id',autoIncrement:true});};
+  rq.onsuccess=e=>{db=e.target.result;res();}; rq.onerror=e=>rej(e.target.error);}); }
+const dbAll=s=>new Promise((res,rej)=>{const r=db.transaction(s).objectStore(s).getAll(); r.onsuccess=()=>res(r.result||[]); r.onerror=()=>rej(r.error);});
+const dbPut=(s,o)=>new Promise((res,rej)=>{const r=db.transaction(s,'readwrite').objectStore(s).put(o); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);});
+const dbBatch=(s,items)=>new Promise((res,rej)=>{const tx=db.transaction(s,'readwrite'); const st=tx.objectStore(s); items.forEach(i=>st.put(i)); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error);});
+const dbClear=s=>new Promise((res,rej)=>{const r=db.transaction(s,'readwrite').objectStore(s).clear(); r.onsuccess=()=>res(); r.onerror=()=>rej(r.error);});
+
+async function refresh(){
+  records=await dbAll('records');
+  history=(await dbAll('history')).sort((a,b)=>new Date(b.ts)-new Date(a.ts));
+  rebuild(); badges(); renderSearch(); renderHistory();
+  document.getElementById('no-data-hint').classList.toggle('hidden',records.length>0);
+}
+
+/* ============ SCAN → RESULT CARD ============ */
+async function processBarcode(raw){
+  const code=(raw||'').trim(); if(!code) return;
+  const m=match(code);
+  const item={raw:code,found:!!m,matched:m?m.list.map(r=>r.raw).join(', '):'',ts:new Date().toISOString()};
+  item.id=await dbPut('history',item); history.unshift(item);
+  playSound(!!m);
+  showResult(m?foundCard(code,m):notFoundCard(code));
+  badges(); if(activeTab==='search') renderHistory();
+}
+
+function thumbSrc(r){ return r.driveId?`https://drive.google.com/thumbnail?id=${r.driveId}&sz=w240`:''; }
+function thumbHtml(r){
+  const s=thumbSrc(r); if(!s) return '';
+  return `<img class="thumb shrink-0" loading="lazy" referrerpolicy="no-referrer" src="${s}" onerror="this.onerror=null;this.src='https://lh3.googleusercontent.com/d/${r.driveId}=w240'" />`;
+}
+
+// GREEN = already in file (photo le li hai)
+function foundCard(code,m){
+  const list=m.list, r=list[0], multi=list.length>1;
+  const el=document.createElement('div');
+  el.className='rcard bg-emerald-600 text-white p-4';
+  el.innerHTML=`
+    <div class="flex items-center justify-between gap-2">
+      <div class="text-2xl font-black leading-none">✔ LE LI HAI</div>
+      <span class="px-2 py-0.5 rounded-full bg-white/20 text-[11px] font-extrabold">${esc(m.type)}${multi?` • ${list.length} IMAGES`:''}</span>
+    </div>
+    <div class="mt-2 text-3xl font-black tracking-tight break-all">${esc(r.srRaw)}</div>
+    <div class="mt-2 grid grid-cols-2 gap-2 text-sm">
+      <div class="rounded-xl bg-black/20 p-2"><div class="text-[10px] uppercase opacity-70 font-bold">Category</div><div class="font-extrabold break-words">${esc(r.category)}</div></div>
+      <div class="rounded-xl bg-black/20 p-2"><div class="text-[10px] uppercase opacity-70 font-bold">Price</div><div class="font-extrabold">${esc(r.price)}</div></div>
+    </div>
+    <div class="mt-2 space-y-2">
+      ${list.map(x=>`
+        <div class="rounded-xl bg-black/20 p-2 flex gap-2 items-center">
+          ${thumbHtml(x)}
           <div class="min-w-0">
-            <div class="font-mono font-bold text-slate-900 text-xs sm:text-sm truncate">${escapeHtml(r.raw)}</div>
-            <div class="text-[11px] text-slate-500">
-              Price: <strong>${escapeHtml(r.price)}</strong> • Cat: <strong>${escapeHtml(r.category)}</strong> • SR: <strong>${escapeHtml(r.srRaw)}</strong>
-            </div>
+            <div class="text-[10px] uppercase opacity-70 font-bold">File Name</div>
+            <div class="font-mono font-extrabold text-sm break-all">${esc(x.raw)}</div>
+            ${x.collection?`<div class="text-[11px] opacity-80 mt-0.5">${esc(x.collection)}</div>`:''}
           </div>
-          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 shrink-0">IN TXT</span>
-        </div>
-      `).join('');
-    }
+        </div>`).join('')}
+    </div>
+    <div class="mt-2 text-[11px] opacity-70">Scanned: <span class="font-mono font-bold">${esc(code)}</span> • tap to close</div>`;
+  return el;
+}
 
-    function renderHistoryList() {
-      const listEl = document.getElementById('history-list');
-      const todayLogs = scanHistory.filter((h) => isToday(h.timestamp));
+// RED = not in file (photo leni hai)
+function notFoundCard(code){
+  const el=document.createElement('div');
+  el.className='rcard bg-rose-600 text-white p-4 flex flex-col';
+  el.innerHTML=`
+    <div class="text-2xl font-black leading-none">✖ PHOTO LENI HAI</div>
+    <div class="mt-2 text-[11px] uppercase opacity-80 font-bold">Scanned Number</div>
+    <div class="text-4xl font-black tracking-tight break-all">${esc(code)}</div>
+    <div class="mt-1 text-sm font-bold opacity-90">File me nahi mila</div>
+    <button onclick="event.stopPropagation();markAsShot('${escJs(code)}')" class="mt-auto w-full py-3 rounded-xl bg-white text-rose-700 font-extrabold text-sm">+ Photo kheench li — list me add karo</button>`;
+  return el;
+}
 
-      if (todayLogs.length === 0) {
-        listEl.innerHTML = `<p class="text-xs text-slate-400 py-4 text-center">Aaj abhi tak koi scan nahi hua hai.</p>`;
-        return;
-      }
+// slide new card in; old card slides out to the left; auto-clears
+function showResult(el){
+  const area=document.getElementById('result-area');
+  document.getElementById('idle').style.display='none';
+  area.querySelectorAll('.rcard').forEach(old=>slideOut(old));
+  el.onclick=()=>slideOut(el);
+  area.appendChild(el);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('in')));
+  clearTimeout(hideTimer);
+  hideTimer=setTimeout(()=>slideOut(el),AUTO_HIDE_MS);
+  lucide.createIcons();
+}
+function slideOut(el){
+  if(!el||el.dataset.gone) return; el.dataset.gone='1';
+  el.classList.remove('in'); el.classList.add('out');
+  setTimeout(()=>{ el.remove(); if(!document.querySelector('#result-area .rcard')) document.getElementById('idle').style.display='flex'; },300);
+}
 
-      listEl.innerHTML = todayLogs.slice(0, 150).map((log) => {
-        const badge = log.found
-          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 shrink-0">FOUND (SKIP)</span>`
-          : `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 shrink-0">NOT FOUND (SHOOT)</span>`;
-        const timeStr = new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+async function markAsShot(code){
+  const rec=parseRecord(code); if(!rec) return;
+  await dbPut('records',rec); await refresh();
+  toast(`"${rec.raw}" list me add ho gaya`,'ok');
+  document.querySelectorAll('#result-area .rcard').forEach(slideOut);
+}
 
-        return `
-          <div class="py-2.5 flex items-center justify-between gap-2">
-            <div class="min-w-0">
-              <div class="font-mono font-bold text-slate-900 text-xs sm:text-sm truncate">${escapeHtml(log.rawScanned)}</div>
-              <div class="text-[11px] text-slate-500 truncate">
-                ${log.matchedFile ? `Matched: ${escapeHtml(log.matchedFile)} • ` : ''}${timeStr}
-              </div>
-            </div>
-            ${badge}
-          </div>
-        `;
-      }).join('');
-    }
+/* ============ CAMERA (fixed box, native BarcodeDetector when available) ============ */
+async function startCamera(){
+  if(camOn) return;
+  const ph=document.getElementById('cam-placeholder');
+  try{
+    document.getElementById('cam-msg').textContent='Camera start ho raha hai...';
+    qr=new Html5Qrcode('camera-reader',{
+      formatsToSupport:[Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E,Html5QrcodeSupportedFormats.ITF,Html5QrcodeSupportedFormats.CODABAR],
+      useBarCodeDetectorIfSupported:true, verbose:false });
+    await qr.start({facingMode:'environment'},{
+      fps:15,
+      qrbox:(w,h)=>({width:Math.floor(w*0.92),height:Math.max(60,Math.floor(h*0.6))})
+    },(txt)=>{
+      const now=Date.now();
+      if(txt===lastCam.code&&now-lastCam.t<COOLDOWN) return;
+      lastCam={code:txt,t:now}; processBarcode(txt);
+    },()=>{});
+    camOn=true; ph.style.display='none';
+    document.getElementById('btn-cam').textContent='Stop';
+    // higher resolution + continuous focus for sharper 1D reads (best effort)
+    try{ await qr.applyVideoConstraints({width:{ideal:1920},height:{ideal:1080},advanced:[{focusMode:'continuous'}]}); }catch(e){}
+    try{ const caps=qr.getRunningTrackCapabilities(); if(caps&&caps.torch) document.getElementById('btn-torch').classList.remove('hidden'); }catch(e){}
+  }catch(err){
+    camOn=false; ph.style.display='flex';
+    document.getElementById('cam-msg').textContent='Camera permission nahi mili (HTTPS par kholo)';
+  }
+}
+async function stopCamera(){
+  if(!camOn||!qr) return;
+  try{ await qr.stop(); qr.clear(); }catch(e){}
+  camOn=false; torchOn=false;
+  document.getElementById('cam-placeholder').style.display='flex';
+  document.getElementById('cam-msg').textContent='Camera band hai';
+  document.getElementById('btn-cam').textContent='Start';
+  document.getElementById('btn-torch').classList.add('hidden');
+}
+function toggleCamera(){ camOn?stopCamera():startCamera(); }
+async function toggleTorch(){
+  if(!camOn) return;
+  try{ torchOn=!torchOn; await qr.applyVideoConstraints({advanced:[{torch:torchOn}]}); document.getElementById('btn-torch').textContent=torchOn?'Flash ON':'Flash'; }
+  catch(e){ toast('Flash support nahi hai','info'); }
+}
 
-    function switchTab(tab) {
-      activeTab = tab;
-      ['scan', 'upload', 'search'].forEach((t) => {
-        document.getElementById(`tab-${t}`).classList.toggle('hidden', t !== tab);
-        const btn = document.getElementById(`tab-btn-${t}`);
-        if (t === tab) {
-          btn.className = 'py-2.5 px-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 bg-slate-900 text-white shadow-xs transition';
-        } else {
-          btn.className = 'py-2.5 px-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-1.5 text-slate-600 hover:bg-slate-100 transition';
-        }
-      });
+/* ============ MANUAL + USB SCANNER ============ */
+function handleManual(e){ e.preventDefault(); const i=document.getElementById('manual-input'); const v=i.value.trim(); if(v){ processBarcode(v); i.value=''; i.focus(); } }
+let hwBuf='', hwT=0;
+window.addEventListener('keydown',e=>{
+  if(activeTab!=='scan') return; const t=e.target; if(t.tagName==='INPUT'||t.tagName==='TEXTAREA') return;
+  const now=Date.now(); if(now-hwT>120) hwBuf=''; hwT=now;
+  if(e.key==='Enter'){ if(hwBuf.length>=2){ e.preventDefault(); const c=hwBuf; hwBuf=''; processBarcode(c);} }
+  else if(e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey) hwBuf+=e.key;
+});
 
-      if (tab === 'search') {
-        renderSearchResults();
-        renderHistoryList();
-      }
-    }
+/* ============ FILE UPLOAD / SAMPLE / EXPORT ============ */
+async function handleFile(ev,mode){
+  const f=ev.target.files?.[0]; if(!f) return;
+  const parsed=parseFileText(await f.text(), f.name);
+  if(!parsed.length){ toast('Koi valid line nahi mili','err'); ev.target.value=''; return; }
+  const uniq=new Map(); parsed.forEach(r=>uniq.set(r.uid,r));
+  const list=[...uniq.values()];
+  if(mode==='REPLACE') await dbClear('records');
+  await dbBatch('records',list); await refresh();
+  const withImg=list.filter(r=>r.imageUrl).length;
+  const box=document.getElementById('upload-status'); box.classList.remove('hidden');
+  box.textContent=`${list.length.toLocaleString()} records load hue (${withImg.toLocaleString()} me image link). Total: ${records.length.toLocaleString()} • Unique numbers: ${groupMap.size.toLocaleString()}`;
+  toast('File save ho gayi','ok'); ev.target.value='';
+}
+async function loadSample(){
+  const s=['599_GW_SR.990720826','599_GW_SR.990750826','WR_SR.960530526','WR_SR.960530526 (1)','735_DR_SR.640391026'];
+  await dbBatch('records',s.map(x=>parseRecord(x))); await refresh(); toast('Sample load ho gaya','ok');
+}
+function exportTxt(){
+  if(!records.length){ toast('Data nahi hai','err'); return; }
+  const blob=new Blob([records.map(r=>r.raw).join('\n')],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`updated-list-${new Date().toISOString().slice(0,10)}.txt`;
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
+function confirmClearAll(){ openModal('Saara data hatana hai?','Saare records delete ho jayenge.',async()=>{await dbClear('records'); await refresh(); toast('Clear ho gaya','info');}); }
+function confirmClearHistory(){ openModal('History clear?','Scan history delete ho jayegi.',async()=>{await dbClear('history'); await refresh();}); }
 
-    function openModal(title, body, onConfirm) {
-      document.getElementById('modal-title').textContent = title;
-      document.getElementById('modal-body').textContent = body;
-      const btn = document.getElementById('modal-confirm-btn');
-      btn.onclick = async () => {
-        closeModal();
-        if (onConfirm) await onConfirm();
-      };
-      document.getElementById('modal-overlay').classList.remove('hidden');
-    }
+/* ============ SEARCH / HISTORY / UI ============ */
+const isToday=iso=>{const d=new Date(iso),n=new Date(); return d.toDateString()===n.toDateString();};
+function badges(){
+  document.getElementById('hdr-count').textContent=`${records.length.toLocaleString()} Records`;
+  document.getElementById('hdr-today').textContent=`${history.filter(h=>isToday(h.ts)).length} aaj`;
+}
+function renderSearch(){
+  const q=(document.getElementById('search-input')?.value||'').trim().toUpperCase();
+  const f=q?records.filter(r=>r.raw.toUpperCase().includes(q)||r.digitsOnly.includes(q)||r.category.toUpperCase().includes(q)):records;
+  document.getElementById('search-count').textContent=`${f.length.toLocaleString()} items`;
+  document.getElementById('search-list').innerHTML=f.length?f.slice(0,100).map(r=>`
+    <div class="py-2"><div class="font-mono font-bold text-xs break-all">${esc(r.raw)}</div>
+    <div class="text-[11px] text-slate-500">Price: ${esc(r.price)} • ${esc(r.category)}${r.imageUrl?' • 🖼':''}</div></div>`).join(''):`<p class="text-xs text-slate-400 py-3 text-center">Kuch nahi mila</p>`;
+}
+function renderHistory(){
+  const l=history.filter(h=>isToday(h.ts)).slice(0,150);
+  document.getElementById('history-list').innerHTML=l.length?l.map(h=>`
+    <div class="py-2 flex justify-between gap-2 items-center">
+      <div class="min-w-0"><div class="font-mono font-bold text-xs truncate">${esc(h.raw)}</div>
+      <div class="text-[11px] text-slate-500 truncate">${new Date(h.ts).toLocaleTimeString()}${h.matched?' • '+esc(h.matched):''}</div></div>
+      <span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold shrink-0 ${h.found?'bg-emerald-100 text-emerald-800':'bg-rose-100 text-rose-800'}">${h.found?'LE LI':'LENI HAI'}</span>
+    </div>`).join(''):`<p class="text-xs text-slate-400 py-3 text-center">Aaj koi scan nahi</p>`;
+}
+async function switchTab(t){
+  activeTab=t;
+  ['scan','upload','search'].forEach(x=>{
+    document.getElementById('tab-'+x).classList.toggle('hidden',x!==t);
+    document.getElementById('tab-'+x).classList.toggle('flex',x===t&&x==='scan');
+    const b=document.getElementById('nav-'+x); b.classList.toggle('text-indigo-600',x===t); b.classList.toggle('text-slate-500',x!==t);
+  });
+  if(t==='scan') startCamera(); else { await stopCamera(); }
+  if(t==='search'){ renderSearch(); renderHistory(); }
+}
+function openModal(t,b,ok){ document.getElementById('modal-title').textContent=t; document.getElementById('modal-body').textContent=b;
+  document.getElementById('modal-ok').onclick=async()=>{closeModal(); await ok();}; document.getElementById('modal').classList.remove('hidden'); }
+function closeModal(){ document.getElementById('modal').classList.add('hidden'); }
+function toast(msg,type){ const c=document.getElementById('toasts'); const el=document.createElement('div');
+  el.className='px-3.5 py-2 rounded-xl shadow-lg text-xs font-bold text-white '+(type==='ok'?'bg-emerald-600':type==='err'?'bg-rose-600':'bg-slate-900'); el.textContent=msg; c.appendChild(el); setTimeout(()=>el.remove(),2500); }
+const esc=s=>(s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const escJs=s=>(s||'').toString().replace(/\\/g,'\\\\').replace(/'/g,"\\'");
 
-    function closeModal() {
-      document.getElementById('modal-overlay').classList.add('hidden');
-    }
-
-    function showToast(msg, type = 'info') {
-      const container = document.getElementById('toast-container');
-      const colors = {
-        success: 'bg-emerald-600 text-white',
-        error: 'bg-rose-600 text-white',
-        info: 'bg-slate-900 text-white',
-      };
-      const el = document.createElement('div');
-      el.className = `px-3.5 py-2.5 rounded-xl shadow-lg text-xs font-bold ${colors[type] || colors.info} pointer-events-auto transition-opacity duration-300`;
-      el.textContent = msg;
-      container.appendChild(el);
-      setTimeout(() => {
-        el.style.opacity = '0';
-        setTimeout(() => el.remove(), 300);
-      }, 3000);
-    }
-
-    function escapeHtml(s) {
-      return (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    function escapeJs(s) {
-      return (s || '').toString().replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    }
-
-    /*************************************************************************
-     * 10. INITIALIZATION
-     *************************************************************************/
-    window.addEventListener('DOMContentLoaded', async () => {
-      lucide.createIcons();
-      try {
-        await initDB();
-        await refreshAllData();
-      } catch (err) {
-        showToast('IndexedDB error: ' + err.message, 'error');
-      }
-    });
-  </script>
+/* ============ INIT ============ */
+window.addEventListener('DOMContentLoaded',async()=>{
+  lucide.createIcons();
+  try{ await initDB(); await refresh(); }catch(e){ toast('DB error: '+e.message,'err'); }
+  switchTab('scan');
+});
+</script>
 </body>
 </html>
