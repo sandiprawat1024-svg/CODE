@@ -136,7 +136,7 @@ let db=null, records=[], history=[], soundOn=true, activeTab='scan';
 const groupMap=new Map();  // full digits (e.g. 960450526) -> [records]  (ALL images of that number)
 const coreMap=new Map();   // digits minus last 4 (MMYY)  -> [records]
 let qr=null, camOn=false, torchOn=false, lastCam={code:'',t:0}, hideTimer=null, audioCtx=null;
-const COOLDOWN=1500, AUTO_HIDE_MS=6000;
+const COOLDOWN=1500, CONFIRM_MS=500; let pend=null, shownKey='';
 
 /* ============ SOUND: green = single chime, red = double buzz ============ */
 function ac(){ if(!audioCtx){const A=window.AudioContext||window.webkitAudioContext; if(A) audioCtx=new A();} if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume(); return audioCtx; }
@@ -244,9 +244,12 @@ async function refresh(){
 }
 
 /* ============ SCAN → RESULT CARD ============ */
-async function processBarcode(raw){
+async function processBarcode(raw,fromCam){
   const code=(raw||'').trim(); if(!code) return;
   const m=match(code);
+  const key=(m?'G:'+m.list[0].digitsOnly:'R:'+code);
+  if(fromCam&&key===shownKey) return;   // same result already on screen
+  shownKey=key;
   const item={raw:code,found:!!m,matched:m?m.list.map(r=>r.raw).join(', '):'',ts:new Date().toISOString()};
   item.id=await dbPut('history',item); history.unshift(item);
   playSound(!!m);
@@ -254,10 +257,10 @@ async function processBarcode(raw){
   badges(); if(activeTab==='search') renderHistory();
 }
 
-function thumbSrc(r){ return r.driveId?`https://drive.google.com/thumbnail?id=${r.driveId}&sz=w240`:''; }
+// Small (w120) + direct googleusercontent URL (no redirect) + eager load = fastest preview
 function thumbHtml(r){
-  const s=thumbSrc(r); if(!s) return '';
-  return `<img class="thumb shrink-0" loading="lazy" referrerpolicy="no-referrer" src="${s}" onerror="this.onerror=null;this.src='https://lh3.googleusercontent.com/d/${r.driveId}=w240'" />`;
+  if(!r.driveId) return '';
+  return `<img class="thumb shrink-0" decoding="async" fetchpriority="high" referrerpolicy="no-referrer" src="https://lh3.googleusercontent.com/d/${r.driveId}=w120" onerror="this.onerror=null;this.src='https://drive.google.com/thumbnail?id=${r.driveId}&sz=w120'" />`;
 }
 
 // GREEN = already in file (photo le li hai)
@@ -286,7 +289,7 @@ function foundCard(code,m){
           </div>
         </div>`).join('')}
     </div>
-    <div class="mt-2 text-[11px] opacity-70">Scanned: <span class="font-mono font-bold">${esc(code)}</span> • tap to close</div>`;
+    <div class="mt-2 text-[11px] opacity-70">Scanned: <span class="font-mono font-bold">${esc(code)}</span></div>`;
   return el;
 }
 
@@ -308,11 +311,8 @@ function showResult(el){
   const area=document.getElementById('result-area');
   document.getElementById('idle').style.display='none';
   area.querySelectorAll('.rcard').forEach(old=>slideOut(old));
-  el.onclick=()=>slideOut(el);
-  area.appendChild(el);
+  area.appendChild(el);   // stays until the next scan replaces it
   requestAnimationFrame(()=>requestAnimationFrame(()=>el.classList.add('in')));
-  clearTimeout(hideTimer);
-  hideTimer=setTimeout(()=>slideOut(el),AUTO_HIDE_MS);
   lucide.createIcons();
 }
 function slideOut(el){
@@ -325,7 +325,33 @@ async function markAsShot(code){
   const rec=parseRecord(code); if(!rec) return;
   await dbPut('records',rec); await refresh();
   toast(`"${rec.raw}" list me add ho gaya`,'ok');
-  document.querySelectorAll('#result-area .rcard').forEach(slideOut);
+  const m=match(code);
+  if(m){ shownKey='G:'+m.list[0].digitsOnly; showResult(foundCard(code,m)); }
+}
+
+/* ============ CAMERA DECODE FILTER ============
+   Green (match) shows instantly. A non-match is often a half/mis-read, so we collect reads
+   for ~0.5s and show RED only for the most frequent read -> no red-then-green flip. */
+function onCamDecode(txt){
+  txt=(txt||'').trim(); if(!txt) return;
+  const now=Date.now();
+  if(match(txt)){
+    clearPending();
+    if(txt===lastCam.code&&now-lastCam.t<COOLDOWN) return;
+    lastCam={code:txt,t:now}; processBarcode(txt,true); return;
+  }
+  if(!pend) pend={reads:{},ext:0,timer:setTimeout(finishPending,CONFIRM_MS)};
+  pend.reads[txt]=(pend.reads[txt]||0)+1;
+}
+function clearPending(){ if(pend){ clearTimeout(pend.timer); pend=null; } }
+function finishPending(){
+  if(!pend) return;
+  const e=Object.entries(pend.reads).sort((a,b)=>b[1]-a[1]);
+  if(e[0][1]<2&&pend.ext<1){ pend.ext++; pend.timer=setTimeout(finishPending,400); return; }
+  const code=e[0][0]; pend=null;
+  const now=Date.now();
+  if(code===lastCam.code&&now-lastCam.t<COOLDOWN) return;
+  lastCam={code,t:now}; processBarcode(code,true);
 }
 
 /* ============ CAMERA (fixed box, native BarcodeDetector when available) ============ */
@@ -340,11 +366,7 @@ async function startCamera(){
     await qr.start({facingMode:'environment'},{
       fps:15,
       qrbox:(w,h)=>({width:Math.floor(w*0.92),height:Math.max(60,Math.floor(h*0.6))})
-    },(txt)=>{
-      const now=Date.now();
-      if(txt===lastCam.code&&now-lastCam.t<COOLDOWN) return;
-      lastCam={code:txt,t:now}; processBarcode(txt);
-    },()=>{});
+    },(txt)=>onCamDecode(txt),()=>{});
     camOn=true; ph.style.display='none';
     document.getElementById('btn-cam').textContent='Stop';
     // higher resolution + continuous focus for sharper 1D reads (best effort)
